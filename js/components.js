@@ -1,856 +1,468 @@
+import * as THREE from 'three';
 
 /* =========================================
-   ZENER-LAB-360
-   FILE: components.js
-   3D Electronic Components
-========================================= */
+   ZENER-LAB-360 : COMPONENTS
+   ========================================= */
 
-import * as THREE from
-    'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
-
-
-/* ---------- Shared Materials ---------- */
-
-const materials = {
+const MATERIALS = {
     board: new THREE.MeshStandardMaterial({
-        color: 0x087d65,
-        roughness: 0.72
-    }),
-
-    boardEdge: new THREE.MeshStandardMaterial({
-        color: 0x075443,
-        roughness: 0.8
-    }),
-
-    metal: new THREE.MeshStandardMaterial({
-        color: 0xb8c5d1,
-        metalness: 0.85,
-        roughness: 0.25
-    }),
-
-    metalDark: new THREE.MeshStandardMaterial({
-        color: 0x596575,
-        metalness: 0.7,
-        roughness: 0.35
-    }),
-
-    diode: new THREE.MeshStandardMaterial({
-        color: 0x171b22,
-        roughness: 0.4
-    }),
-
-    diodeBand: new THREE.MeshStandardMaterial({
-        color: 0xd6dce2,
-        roughness: 0.3
-    }),
-
-    resistor: new THREE.MeshStandardMaterial({
-        color: 0xd5b078,
+        color: 0x172b3b,
         roughness: 0.65
     }),
-
-    red: new THREE.MeshStandardMaterial({
-        color: 0xe64b4b,
-        roughness: 0.5
-    }),
-
-    black: new THREE.MeshStandardMaterial({
-        color: 0x20242b,
-        roughness: 0.5
-    }),
-
-    blue: new THREE.MeshStandardMaterial({
-        color: 0x267bd4,
-        roughness: 0.5
-    }),
-
-    yellow: new THREE.MeshStandardMaterial({
-        color: 0xf2c94c,
-        roughness: 0.5
-    }),
-
     white: new THREE.MeshStandardMaterial({
-        color: 0xf1f4f7,
-        roughness: 0.4
+        color: 0xe8edf2,
+        roughness: 0.45
     }),
-
+    metal: new THREE.MeshStandardMaterial({
+        color: 0xb8c4ce,
+        metalness: 0.75,
+        roughness: 0.25
+    }),
+    red: new THREE.MeshStandardMaterial({ color: 0xef4444 }),
+    black: new THREE.MeshStandardMaterial({ color: 0x202938 }),
+    blue: new THREE.MeshStandardMaterial({ color: 0x2563eb }),
+    yellow: new THREE.MeshStandardMaterial({ color: 0xfacc15 }),
+    green: new THREE.MeshStandardMaterial({ color: 0x22c55e }),
     screen: new THREE.MeshStandardMaterial({
-        color: 0x102c2c,
-        emissive: 0x073c35,
-        emissiveIntensity: 0.5
-    }),
-
-    knob: new THREE.MeshStandardMaterial({
-        color: 0x252b36,
-        roughness: 0.4
+        color: 0x071827,
+        emissive: 0x06283c,
+        emissiveIntensity: 0.7
     })
 };
 
-
-/* ---------- Helper Functions ---------- */
-
-function createBox(
-    width,
-    height,
-    depth,
-    material,
-    x = 0,
-    y = 0,
-    z = 0
-) {
-    const geometry = new THREE.BoxGeometry(
-        width,
-        height,
-        depth
-    );
-
+function box(parent, width, height, depth, material, position) {
     const mesh = new THREE.Mesh(
-        geometry,
+        new THREE.BoxGeometry(width, height, depth),
         material
     );
 
-    mesh.position.set(x, y, z);
+    mesh.position.set(...position);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
+    parent.add(mesh);
 
     return mesh;
 }
 
-
-function createCylinder(
-    radiusTop,
-    radiusBottom,
-    height,
-    material,
-    x = 0,
-    y = 0,
-    z = 0,
-    segments = 24
-) {
-    const geometry = new THREE.CylinderGeometry(
-        radiusTop,
-        radiusBottom,
-        height,
-        segments
-    );
-
+function cylinder(parent, radiusTop, radiusBottom, height, material, position, segments = 24) {
     const mesh = new THREE.Mesh(
-        geometry,
+        new THREE.CylinderGeometry(
+            radiusTop,
+            radiusBottom,
+            height,
+            segments
+        ),
         material
     );
 
-    mesh.position.set(x, y, z);
+    mesh.position.set(...position);
     mesh.castShadow = true;
-    mesh.receiveShadow = true;
+    parent.add(mesh);
 
     return mesh;
 }
 
+function createTerminal(parent, id, label, position, color = 0xfacc15) {
+    const terminal = new THREE.Group();
+    terminal.position.set(...position);
 
-function createLabel(text, color = '#ffffff') {
-    const canvas = document.createElement('canvas');
-
-    canvas.width = 512;
-    canvas.height = 128;
-
-    const context = canvas.getContext('2d');
-
-    context.clearRect(0, 0, 512, 128);
-
-    context.fillStyle = color;
-    context.font = 'bold 48px Arial';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-
-    context.fillText(text, 256, 64);
-
-    const texture = new THREE.CanvasTexture(canvas);
-
-    const material = new THREE.MeshBasicMaterial({
-        map: texture,
-        transparent: true,
-        side: THREE.DoubleSide
-    });
-
-    const geometry = new THREE.PlaneGeometry(1.8, 0.45);
-
-    return new THREE.Mesh(geometry, material);
-}
-
-
-/* =========================================
-   1. BREADBOARD
-========================================= */
-
-export function createBreadboard() {
-    const group = new THREE.Group();
-
-    // Main breadboard body
-    const base = createBox(
-        12,
-        0.45,
-        7,
-        materials.board
-    );
-
-    group.add(base);
-
-    // Top surface
-    const surface = createBox(
-        11.85,
-        0.025,
-        6.85,
+    const pin = new THREE.Mesh(
+        new THREE.SphereGeometry(0.075, 16, 12),
         new THREE.MeshStandardMaterial({
-            color: 0x159476,
-            roughness: 0.8
-        }),
-        0,
+            color,
+            emissive: color,
+            emissiveIntensity: 0.12,
+            metalness: 0.35
+        })
+    );
+
+    pin.userData.isTerminal = true;
+    pin.userData.terminalId = id;
+    pin.userData.terminalLabel = label;
+
+    terminal.add(pin);
+
+    const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.105, 0.012, 8, 20),
+        new THREE.MeshStandardMaterial({ color: 0xffffff })
+    );
+
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.015;
+    terminal.add(ring);
+
+    terminal.userData.isTerminal = true;
+    terminal.userData.terminalId = id;
+    terminal.userData.terminalLabel = label;
+
+    parent.add(terminal);
+
+    return {
+        id,
+        label,
+        object: terminal,
+        pin,
+        getPosition() {
+            const world = new THREE.Vector3();
+            terminal.getWorldPosition(world);
+            return world;
+        }
+    };
+}
+
+function createBreadboard() {
+    const group = new THREE.Group();
+    group.name = 'Breadboard';
+
+    box(group, 5.2, 0.22, 8.2, MATERIALS.white, [0, 0, 0]);
+
+    // Central channel
+    box(
+        group,
+        4.8,
+        0.012,
         0.24,
-        0
+        new THREE.MeshStandardMaterial({ color: 0x9ca3af }),
+        [0, 0.117, 0]
     );
 
-    group.add(surface);
-
-    // Center separation channel
-    const channel = createBox(
-        11.5,
-        0.035,
-        0.45,
-        materials.boardEdge,
-        0,
-        0.265,
-        0
-    );
-
-    group.add(channel);
-
-    // Power rails
-    const railPositions = [
-        -2.9,
-        -2.5,
-        2.5,
-        2.9
-    ];
-
-    railPositions.forEach((z, index) => {
-        const line = createBox(
-            11.5,
-            0.018,
-            0.025,
-            index % 2 === 0
-                ? materials.red
-                : materials.blue,
-            0,
-            0.27,
-            z
-        );
-
-        group.add(line);
+    // Power rail lines
+    const railMaterial = new THREE.MeshStandardMaterial({
+        color: 0xef4444
     });
 
-    // Breadboard holes
+    const negativeMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2563eb
+    });
+
+    for (let x of [-2.15, 2.15]) {
+        box(group, 0.018, 0.008, 7.7, railMaterial, [x, 0.116, 0]);
+        box(group, 0.018, 0.008, 7.7, negativeMaterial, [x + 0.12, 0.116, 0]);
+    }
+
+    // Visual terminal holes
     const holeMaterial = new THREE.MeshStandardMaterial({
-        color: 0x063c32,
-        roughness: 0.9
+        color: 0x34495e,
+        metalness: 0.3
     });
 
-    const holeGeometry = new THREE.CylinderGeometry(
-        0.035,
-        0.035,
-        0.015,
-        12
-    );
+    for (let row = 0; row < 30; row++) {
+        const z = -3.55 + row * 0.245;
 
-    const rows = 30;
-    const columns = 10;
-    const spacingX = 0.36;
-    const spacingZ = 0.34;
+        for (const side of [-1, 1]) {
+            for (let col = 0; col < 5; col++) {
+                const x = side * (0.38 + col * 0.19);
 
-    for (let row = 0; row < rows; row++) {
-        for (let column = 0; column < columns; column++) {
+                const hole = cylinder(
+                    group,
+                    0.035,
+                    0.035,
+                    0.012,
+                    holeMaterial,
+                    [x, 0.12, z],
+                    12
+                );
 
-            const z = (column - 4.5) * spacingZ;
-
-            // Leave central channel empty
-            if (Math.abs(z) < 0.35) {
-                continue;
+                hole.rotation.x = Math.PI / 2;
             }
-
-            const hole = new THREE.Mesh(
-                holeGeometry,
-                holeMaterial
-            );
-
-            hole.position.set(
-                (row - 14.5) * spacingX,
-                0.285,
-                z
-            );
-
-            group.add(hole);
         }
     }
 
-    // Board label
-    const label = createLabel(
-        'BREADBOARD',
-        '#e9fff8'
-    );
-
-    label.position.set(0, 0.31, -3.15);
-    group.add(label);
-
-    group.userData = {
-        type: 'breadboard',
-        name: 'Solderless Breadboard',
-        description:
-            'Breadboard used for temporary circuit connections.',
-        dimensions: {
-            width: 12,
-            depth: 7
-        }
-    };
-
+    group.userData.componentType = 'breadboard';
     return group;
 }
 
-
 /* =========================================
-   2. ZENER DIODE
-========================================= */
+   RESISTOR
+   ========================================= */
 
-export function createZenerDiode() {
+function createResistor() {
     const group = new THREE.Group();
 
-    // Diode body
-    const body = createCylinder(
-        0.17,
-        0.17,
-        0.85,
-        materials.diode,
-        0,
-        0.48,
-        0
-    );
+    cylinder(
+        group,
+        0.105,
+        0.105,
+        0.62,
+        new THREE.MeshStandardMaterial({ color: 0xd6b27a }),
+        [0, 0.18, 0]
+    ).rotation.z = Math.PI / 2;
 
-    body.rotation.z = Math.PI / 2;
+    // Leads
+    const leadMaterial = MATERIALS.metal;
 
-    group.add(body);
+    cylinder(group, 0.018, 0.018, 0.42, leadMaterial, [-0.48, 0.18, 0])
+        .rotation.z = Math.PI / 2;
 
-    // Cathode band
-    const band = createCylinder(
-        0.175,
-        0.175,
-        0.13,
-        materials.diodeBand,
-        0.29,
-        0.48,
-        0
-    );
+    cylinder(group, 0.018, 0.018, 0.42, leadMaterial, [0.48, 0.18, 0])
+        .rotation.z = Math.PI / 2;
 
-    band.rotation.z = Math.PI / 2;
-    group.add(band);
-
-    // Anode lead
-    const anode = createCylinder(
-        0.025,
-        0.025,
-        0.8,
-        materials.metal,
-        -0.82,
-        0.48,
-        0
-    );
-
-    anode.rotation.z = Math.PI / 2;
-    group.add(anode);
-
-    // Cathode lead
-    const cathode = createCylinder(
-        0.025,
-        0.025,
-        0.8,
-        materials.metal,
-        0.82,
-        0.48,
-        0
-    );
-
-    cathode.rotation.z = Math.PI / 2;
-    group.add(cathode);
-
-    group.userData = {
-        type: 'zener-diode',
-        name: 'Zener Diode',
-        terminals: {
-            anode: 'Left terminal',
-            cathode: 'Terminal marked by band'
-        },
-        description:
-            'A semiconductor diode designed to operate in reverse breakdown under suitable current limiting.'
-    };
-
-    return group;
-}
-
-
-/* =========================================
-   3. RESISTOR
-========================================= */
-
-export function createResistor() {
-    const group = new THREE.Group();
-
-    const body = createCylinder(
-        0.13,
-        0.13,
-        0.9,
-        materials.resistor,
-        0,
-        0.4,
-        0
-    );
-
-    body.rotation.z = Math.PI / 2;
-    group.add(body);
-
-    // Resistor colour bands
-    const bandColors = [
-        0x8b4513,
-        0x171717,
-        0xe0b52c
-    ];
+    // Colour bands
+    const bandColors = [0x8b4513, 0xff0000, 0x8b4513, 0xffd700];
 
     bandColors.forEach((color, index) => {
-        const bandMaterial = new THREE.MeshStandardMaterial({
-            color
-        });
-
-        const band = createCylinder(
-            0.135,
-            0.135,
-            0.07,
-            bandMaterial,
-            -0.2 + index * 0.2,
-            0.4,
-            0
+        const band = cylinder(
+            group,
+            0.108,
+            0.108,
+            0.055,
+            new THREE.MeshStandardMaterial({ color }),
+            [-0.2 + index * 0.13, 0.18, 0]
         );
 
         band.rotation.z = Math.PI / 2;
-        group.add(band);
     });
 
-    // Leads
-    [-0.85, 0.85].forEach(x => {
-        const lead = createCylinder(
-            0.018,
-            0.018,
-            0.65,
-            materials.metal,
-            x,
-            0.4,
-            0
-        );
+    group.userData.componentType = 'resistor';
+    group.userData.value = 1000;
 
-        lead.rotation.z = Math.PI / 2;
-        group.add(lead);
-    });
-
-    group.userData = {
-        type: 'resistor',
-        name: 'Current Limiting Resistor',
-        resistance: 1000,
-        unit: 'Ohm',
-        description:
-            'Limits current through the Zener diode circuit.'
-    };
+    createTerminal(group, 'R1', 'Resistor terminal 1', [-0.7, 0.18, 0]);
+    createTerminal(group, 'R2', 'Resistor terminal 2', [0.7, 0.18, 0]);
 
     return group;
 }
 
-
 /* =========================================
-   4. POTENTIOMETER
-========================================= */
+   ZENER DIODE
+   ========================================= */
 
-export function createPotentiometer() {
+function createZenerDiode() {
     const group = new THREE.Group();
 
-    // Main body
-    const body = createCylinder(
-        0.62,
-        0.62,
-        0.32,
-        materials.blue,
-        0,
-        0.35,
-        0
-    );
-
-    group.add(body);
-
-    // Upper surface
-    const top = createCylinder(
+    cylinder(
+        group,
+        0.13,
+        0.13,
         0.52,
-        0.52,
-        0.06,
-        materials.knob,
-        0,
-        0.54,
-        0
+        new THREE.MeshStandardMaterial({ color: 0x30343b }),
+        [0, 0.18, 0]
+    ).rotation.z = Math.PI / 2;
+
+    cylinder(group, 0.018, 0.018, 0.48, MATERIALS.metal, [-0.5, 0.18, 0])
+        .rotation.z = Math.PI / 2;
+
+    cylinder(group, 0.018, 0.018, 0.48, MATERIALS.metal, [0.5, 0.18, 0])
+        .rotation.z = Math.PI / 2;
+
+    // Cathode marking band
+    const band = cylinder(
+        group,
+        0.135,
+        0.135,
+        0.07,
+        MATERIALS.yellow,
+        [0.2, 0.18, 0]
     );
+    band.rotation.z = Math.PI / 2;
 
-    group.add(top);
+    group.userData.componentType = 'zener-diode';
+    group.userData.zenerVoltage = 5.1;
 
-    // Rotating knob
-    const knob = createCylinder(
-        0.28,
-        0.28,
-        0.3,
-        materials.yellow,
-        0,
-        0.72,
-        0
-    );
-
-    group.add(knob);
-
-    // Pointer
-    const pointer = createBox(
-        0.06,
-        0.025,
-        0.25,
-        materials.white,
-        0,
-        0.89,
-        -0.05
-    );
-
-    group.add(pointer);
-
-    // Three terminals
-    [-0.4, 0, 0.4].forEach(x => {
-        const pin = createCylinder(
-            0.035,
-            0.035,
-            0.55,
-            materials.metal,
-            x,
-            0.05,
-            0.35
-        );
-
-        group.add(pin);
-    });
-
-    group.userData = {
-        type: 'potentiometer',
-        name: 'Variable Resistor',
-        resistance: 10000,
-        terminals: 3,
-        description:
-            'Adjustable resistance used to control the circuit condition.'
-    };
+    createTerminal(group, 'A', 'Anode', [-0.72, 0.18, 0], 0x22c55e);
+    createTerminal(group, 'K', 'Cathode', [0.72, 0.18, 0], 0xef4444);
 
     return group;
 }
 
-
 /* =========================================
-   5. DC POWER SUPPLY
-========================================= */
+   POTENTIOMETER
+   ========================================= */
 
-export function createDCPowerSupply() {
+function createPotentiometer() {
     const group = new THREE.Group();
 
-    const casing = createBox(
-        3,
-        1.8,
-        2,
-        materials.knob,
-        0,
-        0.9,
-        0
+    cylinder(
+        group,
+        0.34,
+        0.34,
+        0.22,
+        new THREE.MeshStandardMaterial({ color: 0x334155 }),
+        [0, 0.18, 0]
     );
 
-    group.add(casing);
-
-    // Display
-    const display = createBox(
-        1.65,
-        0.65,
-        0.04,
-        materials.screen,
-        0,
-        1.2,
-        1.02
+    cylinder(
+        group,
+        0.12,
+        0.12,
+        0.12,
+        MATERIALS.metal,
+        [0, 0.36, 0]
     );
 
-    group.add(display);
-
-    // Voltage display label
-    const displayLabel = createLabel(
-        'DC SUPPLY',
-        '#7dffdc'
+    const knob = cylinder(
+        group,
+        0.09,
+        0.09,
+        0.08,
+        MATERIALS.red,
+        [0, 0.45, 0]
     );
 
-    displayLabel.scale.set(0.65, 0.65, 0.65);
-    displayLabel.position.set(0, 1.22, 1.05);
+    knob.userData.isKnob = true;
 
-    group.add(displayLabel);
+    group.userData.componentType = 'potentiometer';
+    group.userData.value = 1000;
 
-    // Adjustment knob
-    const knob = createCylinder(
-        0.3,
-        0.3,
-        0.18,
-        materials.metal,
-        0,
-        0.8,
-        1.05
-    );
-
-    knob.rotation.x = Math.PI / 2;
-    group.add(knob);
-
-    // Output terminals
-    const terminalColors = [
-        materials.red,
-        materials.black
-    ];
-
-    [-0.6, 0.6].forEach((x, index) => {
-        const terminal = createCylinder(
-            0.12,
-            0.12,
-            0.2,
-            terminalColors[index],
-            x,
-            0.45,
-            1.05
-        );
-
-        terminal.rotation.x = Math.PI / 2;
-        group.add(terminal);
-    });
-
-    group.userData = {
-        type: 'dc-supply',
-        name: 'Variable DC Power Supply',
-        output: '0–12 V educational model',
-        description:
-            'Provides adjustable low-voltage DC for the experiment.'
-    };
+    createTerminal(group, 'P1', 'Potentiometer terminal 1', [-0.25, 0.08, 0.2]);
+    createTerminal(group, 'PW', 'Potentiometer wiper', [0, 0.08, 0.2]);
+    createTerminal(group, 'P2', 'Potentiometer terminal 2', [0.25, 0.08, 0.2]);
 
     return group;
 }
 
-
 /* =========================================
-   6. DIGITAL AMMETER
-========================================= */
+   DC POWER SUPPLY
+   ========================================= */
 
-export function createAmmeter() {
+function createDCPowerSupply() {
     const group = new THREE.Group();
 
-    const casing = createBox(
-        2,
-        1.35,
-        0.45,
-        materials.knob,
-        0,
-        0.68,
-        0
-    );
+    box(group, 1.35, 0.8, 0.95, MATERIALS.board, [0, 0.4, 0]);
 
-    group.add(casing);
+    box(group, 0.85, 0.32, 0.035, MATERIALS.screen, [0, 0.52, 0.49]);
 
-    const screen = createBox(
-        1.45,
-        0.58,
+    // Display detail
+    box(
+        group,
+        0.55,
         0.035,
-        materials.screen,
-        0,
-        0.82,
-        0.24
+        0.012,
+        new THREE.MeshStandardMaterial({
+            color: 0x38bdf8,
+            emissive: 0x0284c7
+        }),
+        [0, 0.56, 0.515]
     );
 
-    group.add(screen);
+    cylinder(group, 0.09, 0.09, 0.07, MATERIALS.red, [-0.35, 0.12, 0.5]);
+    cylinder(group, 0.09, 0.09, 0.07, MATERIALS.black, [0.35, 0.12, 0.5]);
 
-    const label = createLabel(
-        '0.00 mA',
-        '#7dff9c'
-    );
+    group.userData.componentType = 'dc-supply';
 
-    label.scale.set(0.65, 0.65, 0.65);
-    label.position.set(0, 0.85, 0.27);
-
-    group.add(label);
-
-    // Terminals
-    [-0.55, 0.55].forEach((x, index) => {
-        const terminal = createCylinder(
-            0.09,
-            0.09,
-            0.15,
-            index === 0 ? materials.red : materials.black,
-            x,
-            0.15,
-            0.28
-        );
-
-        terminal.rotation.x = Math.PI / 2;
-        group.add(terminal);
-    });
-
-    group.userData = {
-        type: 'ammeter',
-        name: 'Digital Ammeter',
-        unit: 'mA',
-        description:
-            'Measures the current flowing through the circuit.'
-    };
+    createTerminal(group, 'POS', 'DC positive', [-0.35, 0.12, 0.62], 0xef4444);
+    createTerminal(group, 'NEG', 'DC negative', [0.35, 0.12, 0.62], 0x2563eb);
 
     return group;
 }
 
-
 /* =========================================
-   7. DIGITAL VOLTMETER
-========================================= */
+   AMMETER
+   ========================================= */
 
-export function createVoltmeter() {
+function createAmmeter() {
     const group = new THREE.Group();
 
-    const casing = createBox(
-        2,
-        1.35,
-        0.45,
-        materials.knob,
-        0,
-        0.68,
-        0
-    );
+    box(group, 1.15, 0.72, 0.85, MATERIALS.board, [0, 0.36, 0]);
 
-    group.add(casing);
+    box(group, 0.75, 0.28, 0.025, MATERIALS.screen, [0, 0.48, 0.44]);
 
-    const screen = createBox(
-        1.45,
-        0.58,
-        0.035,
-        materials.screen,
-        0,
-        0.82,
-        0.24
-    );
+    cylinder(group, 0.075, 0.075, 0.07, MATERIALS.red, [-0.3, 0.1, 0.45]);
+    cylinder(group, 0.075, 0.075, 0.07, MATERIALS.black, [0.3, 0.1, 0.45]);
 
-    group.add(screen);
+    group.userData.componentType = 'ammeter';
 
-    const label = createLabel(
-        '0.00 V',
-        '#70dfff'
-    );
-
-    label.scale.set(0.65, 0.65, 0.65);
-    label.position.set(0, 0.85, 0.27);
-
-    group.add(label);
-
-    // Terminals
-    [-0.55, 0.55].forEach((x, index) => {
-        const terminal = createCylinder(
-            0.09,
-            0.09,
-            0.15,
-            index === 0 ? materials.red : materials.black,
-            x,
-            0.15,
-            0.28
-        );
-
-        terminal.rotation.x = Math.PI / 2;
-        group.add(terminal);
-    });
-
-    group.userData = {
-        type: 'voltmeter',
-        name: 'Digital Voltmeter',
-        unit: 'V',
-        description:
-            'Measures the potential difference across a circuit element.'
-    };
+    createTerminal(group, 'A+', 'Ammeter positive', [-0.3, 0.1, 0.58], 0xef4444);
+    createTerminal(group, 'A-', 'Ammeter negative', [0.3, 0.1, 0.58], 0x2563eb);
 
     return group;
 }
 
+/* =========================================
+   VOLTMETER
+   ========================================= */
+
+function createVoltmeter() {
+    const group = new THREE.Group();
+
+    box(group, 1.15, 0.72, 0.85, MATERIALS.board, [0, 0.36, 0]);
+
+    box(group, 0.75, 0.28, 0.025, MATERIALS.screen, [0, 0.48, 0.44]);
+
+    cylinder(group, 0.075, 0.075, 0.07, MATERIALS.red, [-0.3, 0.1, 0.45]);
+    cylinder(group, 0.075, 0.075, 0.07, MATERIALS.black, [0.3, 0.1, 0.45]);
+
+    group.userData.componentType = 'voltmeter';
+
+    createTerminal(group, 'V+', 'Voltmeter positive', [-0.3, 0.1, 0.58], 0xef4444);
+    createTerminal(group, 'V-', 'Voltmeter negative', [0.3, 0.1, 0.58], 0x2563eb);
+
+    return group;
+}
 
 /* =========================================
-   8. COMPONENT FACTORY
-========================================= */
+   COMPONENT FACTORY
+   ========================================= */
+
+const COMPONENT_FACTORIES = {
+    breadboard: createBreadboard,
+    resistor: createResistor,
+    'zener-diode': createZenerDiode,
+    zener: createZenerDiode,
+    potentiometer: createPotentiometer,
+    'dc-supply': createDCPowerSupply,
+    'dc-power-supply': createDCPowerSupply,
+    ammeter: createAmmeter,
+    voltmeter: createVoltmeter
+};
 
 export function createComponent(type) {
-    const componentMap = {
-        breadboard: createBreadboard,
-        zener: createZenerDiode,
-        resistor: createResistor,
-        potentiometer: createPotentiometer,
-        dcSupply: createDCPowerSupply,
-        ammeter: createAmmeter,
-        voltmeter: createVoltmeter
-    };
-
-    const factory = componentMap[type];
+    const factory = COMPONENT_FACTORIES[type];
 
     if (!factory) {
-        console.warn(
-            `Unknown component type: ${type}`
-        );
-
-        return null;
+        console.warn(`Unknown component type: ${type}`);
+        return new THREE.Group();
     }
 
-    return factory();
+    const component = factory();
+    component.userData.componentType = type;
+
+    return component;
 }
 
+export { createBreadboard };
 
 /* =========================================
-   9. COMPONENT INFORMATION
-========================================= */
+   COMPONENT INFORMATION
+   ========================================= */
 
 export const componentInformation = {
-    breadboard: {
-        title: 'Breadboard',
-        purpose: 'Temporary circuit assembly without soldering.'
-    },
-
-    zener: {
-        title: 'Zener Diode',
-        purpose: 'Used to study forward and reverse characteristics.'
-    },
-
     resistor: {
-        title: 'Series Resistor',
-        purpose: 'Limits current and protects the diode.'
+        name: 'Resistor',
+        terminals: ['R1', 'R2'],
+        defaultValue: '1 kΩ',
+        purpose: 'Limits current in the circuit.'
+    },
+
+    'zener-diode': {
+        name: 'Zener Diode',
+        terminals: ['A', 'K'],
+        defaultValue: '5.1 V',
+        purpose: 'Maintains an approximately constant voltage in reverse breakdown.'
     },
 
     potentiometer: {
-        title: 'Potentiometer',
-        purpose: 'Adjusts resistance in the experimental circuit.'
+        name: 'Potentiometer',
+        terminals: ['P1', 'PW', 'P2'],
+        defaultValue: '1 kΩ',
+        purpose: 'Provides adjustable resistance.'
     },
 
-    dcSupply: {
-        title: 'DC Power Supply',
-        purpose: 'Provides a controlled low-voltage DC input.'
+    'dc-supply': {
+        name: 'DC Power Supply',
+        terminals: ['POS', 'NEG'],
+        defaultValue: '0–12 V',
+        purpose: 'Provides a low-voltage DC source.'
     },
 
     ammeter: {
-        title: 'Ammeter',
-        purpose: 'Measures circuit current and is connected in series.'
+        name: 'Ammeter',
+        terminals: ['A+', 'A-'],
+        purpose: 'Measures current in series.'
     },
 
     voltmeter: {
-        title: 'Voltmeter',
-        purpose: 'Measures voltage and is connected in parallel.'
+        name: 'Voltmeter',
+        terminals: ['V+', 'V-'],
+        purpose: 'Measures voltage in parallel.'
     }
 };
-
