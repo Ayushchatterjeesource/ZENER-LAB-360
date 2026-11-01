@@ -1,409 +1,691 @@
 
-
-/* =========================================
+/* =====================================================
    ZENER-LAB-360
-   FILE: breadboard.js
+   FILE: js/breadboard.js
 
-   Breadboard Layout & Connection Mapping
-========================================= */
+   Interactive Breadboard Coordinate & Node System
+===================================================== */
 
-import * as THREE from
-    'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+export class BreadboardSystem {
 
+    constructor(options = {}) {
 
-/* ---------- Breadboard Configuration ---------- */
+        this.config = {
 
-export const BREADBOARD_CONFIG = {
-    rows: 30,
-    columns: 10,
+            rows: 30,
 
-    spacingX: 0.36,
-    spacingZ: 0.34,
+            columns: 10,
 
-    surfaceY: 0.285,
+            holeSpacingX: 0.25,
 
-    centerGap: 0.45,
+            holeSpacingZ: 0.25,
 
-    width: 12,
-    depth: 7,
+            centerGap: 0.55,
 
-    powerRails: {
-        positive: [-2.9, 2.9],
-        negative: [-2.5, 2.5]
-    }
-};
+            railSpacing: 0.25,
 
+            startX: -1.125,
 
-/* ---------- Coordinate Helpers ---------- */
+            startZ: -3.625,
 
-export function getHolePosition(row, column) {
+            ...options
 
-    const config = BREADBOARD_CONFIG;
+        };
 
-    if (
-        row < 1 ||
-        row > config.rows ||
-        column < 1 ||
-        column > config.columns
-    ) {
-        return null;
+        this.holes = new Map();
+
+        this.nodes = new Map();
+
+        this.components = new Map();
+
+        this.connections = new Map();
+
+        this.initialize();
     }
 
-    const z =
-        (column - 5.5) * config.spacingZ;
 
-    // The center channel has no connection holes.
-    if (Math.abs(z) < config.centerGap / 2) {
-        return null;
+    /* ================================================
+       INITIALIZE BOARD
+    ================================================ */
+
+    initialize() {
+
+        this.holes.clear();
+
+        this.nodes.clear();
+
+        this.components.clear();
+
+        this.connections.clear();
+
+        this.createTerminalRows();
+
+        this.createPowerRails();
     }
 
-    return new THREE.Vector3(
-        (row - 15.5) * config.spacingX,
-        config.surfaceY,
-        z
-    );
-}
 
+    /* ================================================
+       TERMINAL ROWS
+    ================================================ */
 
-/* ---------- Terminal Identification ---------- */
+    createTerminalRows() {
 
-export function getTerminalName(row, column) {
+        const {
+            rows,
+            holeSpacingX,
+            holeSpacingZ,
+            centerGap,
+            startX,
+            startZ
+        } = this.config;
 
-    if (
-        row < 1 ||
-        row > BREADBOARD_CONFIG.rows ||
-        column < 1 ||
-        column > BREADBOARD_CONFIG.columns
-    ) {
-        return null;
-    }
-
-    const position = getHolePosition(row, column);
-
-    if (!position) {
-        return null;
-    }
-
-    const side = column <= 5
-        ? 'upper'
-        : 'lower';
-
-    return `${side}-${row}-${column}`;
-}
-
-
-/* ---------- Breadboard Connection Groups ---------- */
-
-/*
-    Standard breadboard layout:
-
-    Each row of five holes on one side
-    is electrically connected internally.
-
-    The center gap separates the two sides.
-
-    Power rails run lengthwise.
-*/
-
-export function getConnectedGroup(row, column) {
-
-    const position = getHolePosition(row, column);
-
-    if (!position) {
-        return null;
-    }
-
-    const side = column <= 5
-        ? 'upper'
-        : 'lower';
-
-    return {
-        id: `${side}-row-${row}`,
-        row,
-        side,
-        columns: side === 'upper'
-            ? [1, 2, 3, 4, 5]
-            : [6, 7, 8, 9, 10]
-    };
-}
-
-
-/* ---------- Electrical Connectivity ---------- */
-
-export function areHolesConnected(
-    first,
-    second
-) {
-
-    if (!first || !second) {
-        return false;
-    }
-
-    // Same physical hole
-    if (
-        first.row === second.row &&
-        first.column === second.column
-    ) {
-        return true;
-    }
-
-    const firstGroup = getConnectedGroup(
-        first.row,
-        first.column
-    );
-
-    const secondGroup = getConnectedGroup(
-        second.row,
-        second.column
-    );
-
-    if (!firstGroup || !secondGroup) {
-        return false;
-    }
-
-    // Same internal terminal strip
-    return firstGroup.id === secondGroup.id;
-}
-
-
-/* ---------- Hole Validation ---------- */
-
-export function isValidHole(row, column) {
-
-    return Boolean(
-        getHolePosition(row, column)
-    );
-}
-
-
-/* ---------- Generate All Hole Coordinates ---------- */
-
-export function generateHoleMap() {
-
-    const holes = [];
-
-    for (
-        let row = 1;
-        row <= BREADBOARD_CONFIG.rows;
-        row++
-    ) {
-
-        for (
-            let column = 1;
-            column <= BREADBOARD_CONFIG.columns;
-            column++
-        ) {
-
-            const position = getHolePosition(
-                row,
-                column
-            );
-
-            if (!position) {
-                continue;
+        const groups = [
+            {
+                name: 'upper',
+                columns: [0, 1, 2, 3, 4],
+                zOffset: 0
+            },
+            {
+                name: 'lower',
+                columns: [5, 6, 7, 8, 9],
+                zOffset: centerGap
             }
+        ];
 
-            holes.push({
-                id: `R${row}-C${column}`,
+        for (const group of groups) {
 
-                row,
-                column,
+            for (let row = 0; row < rows; row++) {
 
-                position: {
-                    x: position.x,
-                    y: position.y,
-                    z: position.z
-                },
+                const rowId =
+                    `${group.name}-row-${row + 1}`;
 
-                group: getConnectedGroup(
-                    row,
-                    column
-                ).id
-            });
+                const nodeId = rowId;
+
+                const z =
+                    startZ +
+                    row * holeSpacingZ +
+                    group.zOffset;
+
+                this.nodes.set(nodeId, {
+
+                    id: nodeId,
+
+                    type: 'terminal-row',
+
+                    holes: [],
+
+                    connections: new Set()
+
+                });
+
+
+                for (const column of group.columns) {
+
+                    const x =
+                        startX +
+                        column * holeSpacingX;
+
+                    const holeId =
+                        this.getHoleId(
+                            group.name,
+                            row + 1,
+                            column + 1
+                        );
+
+                    this.addHole({
+
+                        id: holeId,
+
+                        x,
+
+                        y: 0.22,
+
+                        z,
+
+                        nodeId,
+
+                        section: group.name,
+
+                        row: row + 1,
+
+                        column: column + 1,
+
+                        type: 'terminal'
+
+                    });
+                }
+            }
         }
     }
 
-    return holes;
-}
+
+    /* ================================================
+       POWER RAILS
+    ================================================ */
+
+    createPowerRails() {
+
+        const {
+            rows,
+            railSpacing,
+            holeSpacingX,
+            startX,
+            startZ
+        } = this.config;
+
+        const rails = [
+
+            {
+                name: 'positive-top',
+                z: startZ - railSpacing,
+                polarity: 'positive'
+            },
+
+            {
+                name: 'negative-top',
+                z: startZ - railSpacing * 2,
+                polarity: 'negative'
+            },
+
+            {
+                name: 'positive-bottom',
+                z:
+                    startZ +
+                    (rows - 1) *
+                    this.config.holeSpacingZ +
+                    this.config.centerGap +
+                    railSpacing,
+                polarity: 'positive'
+            },
+
+            {
+                name: 'negative-bottom',
+                z:
+                    startZ +
+                    (rows - 1) *
+                    this.config.holeSpacingZ +
+                    this.config.centerGap +
+                    railSpacing * 2,
+                polarity: 'negative'
+            }
+
+        ];
 
 
-/* ---------- Power Rail Coordinates ---------- */
+        for (const rail of rails) {
 
-export function getPowerRailPosition(
-    rail,
-    row
-) {
+            const nodeId = rail.name;
 
-    const config = BREADBOARD_CONFIG;
+            this.nodes.set(nodeId, {
 
-    if (
-        row < 1 ||
-        row > config.rows
+                id: nodeId,
+
+                type: 'power-rail',
+
+                polarity: rail.polarity,
+
+                holes: [],
+
+                connections: new Set()
+
+            });
+
+
+            for (let column = 0; column < 5; column++) {
+
+                const x =
+                    startX +
+                    column * holeSpacingX;
+
+                const holeId =
+                    `rail-${rail.name}-${column + 1}`;
+
+                this.addHole({
+
+                    id: holeId,
+
+                    x,
+
+                    y: 0.22,
+
+                    z: rail.z,
+
+                    nodeId,
+
+                    type: 'power',
+
+                    polarity: rail.polarity,
+
+                    column: column + 1
+
+                });
+            }
+        }
+    }
+
+
+    /* ================================================
+       ADD HOLE
+    ================================================ */
+
+    addHole(hole) {
+
+        this.holes.set(hole.id, hole);
+
+        const node =
+            this.nodes.get(hole.nodeId);
+
+        if (node) {
+
+            node.holes.push(hole.id);
+
+        }
+    }
+
+
+    /* ================================================
+       HOLE ID
+    ================================================ */
+
+    getHoleId(section, row, column) {
+
+        return `${section}-r${row}-c${column}`;
+    }
+
+
+    /* ================================================
+       GET HOLE
+    ================================================ */
+
+    getHole(holeId) {
+
+        return this.holes.get(holeId) || null;
+    }
+
+
+    /* ================================================
+       GET HOLE POSITION
+    ================================================ */
+
+    getHolePosition(holeId) {
+
+        const hole =
+            this.getHole(holeId);
+
+        if (!hole) {
+            return null;
+        }
+
+        return {
+
+            x: hole.x,
+
+            y: hole.y,
+
+            z: hole.z
+
+        };
+    }
+
+
+    /* ================================================
+       FIND NEAREST HOLE
+    ================================================ */
+
+    findNearestHole(position, maxDistance = 0.25) {
+
+        let nearest = null;
+
+        let nearestDistance = Infinity;
+
+        for (const hole of this.holes.values()) {
+
+            const dx = position.x - hole.x;
+
+            const dy = position.y - hole.y;
+
+            const dz = position.z - hole.z;
+
+            const distance = Math.sqrt(
+                dx * dx +
+                dy * dy +
+                dz * dz
+            );
+
+            if (distance < nearestDistance) {
+
+                nearestDistance = distance;
+
+                nearest = hole;
+
+            }
+        }
+
+        if (
+            nearest &&
+            nearestDistance <= maxDistance
+        ) {
+
+            return {
+
+                ...nearest,
+
+                distance: nearestDistance
+
+            };
+        }
+
+        return null;
+    }
+
+
+    /* ================================================
+       REGISTER COMPONENT
+    ================================================ */
+
+    registerComponent(
+        componentId,
+        terminals = []
     ) {
-        return null;
+
+        if (!componentId) {
+            return false;
+        }
+
+        this.components.set(componentId, {
+
+            id: componentId,
+
+            terminals: terminals.map(
+                (terminal, index) => ({
+
+                    id:
+                        terminal.id ||
+                        `terminal-${index + 1}`,
+
+                    holeId:
+                        terminal.holeId || null,
+
+                    nodeId: null
+
+                })
+            )
+
+        });
+
+        return true;
     }
 
-    const railPositions = {
-        positiveTop: -2.9,
-        negativeTop: -2.5,
-        negativeBottom: 2.5,
-        positiveBottom: 2.9
-    };
 
-    const z = railPositions[rail];
+    /* ================================================
+       PLACE COMPONENT TERMINAL
+    ================================================ */
 
-    if (z === undefined) {
-        return null;
+    placeTerminal(
+        componentId,
+        terminalId,
+        holeId
+    ) {
+
+        const component =
+            this.components.get(componentId);
+
+        const hole =
+            this.getHole(holeId);
+
+        if (!component || !hole) {
+
+            return {
+
+                success: false,
+
+                message: 'Invalid component or breadboard hole.'
+
+            };
+        }
+
+        const terminal =
+            component.terminals.find(
+                item => item.id === terminalId
+            );
+
+        if (!terminal) {
+
+            return {
+
+                success: false,
+
+                message: 'Component terminal not found.'
+
+            };
+        }
+
+        terminal.holeId = holeId;
+
+        terminal.nodeId = hole.nodeId;
+
+        return {
+
+            success: true,
+
+            componentId,
+
+            terminalId,
+
+            holeId,
+
+            nodeId: hole.nodeId
+
+        };
     }
 
-    return new THREE.Vector3(
-        (row - 15.5) * config.spacingX,
-        config.surfaceY,
-        z
-    );
+
+    /* ================================================
+       CREATE JUMPER WIRE
+    ================================================ */
+
+    connectHoles(
+        connectionId,
+        startHoleId,
+        endHoleId,
+        color = 'red'
+    ) {
+
+        const start =
+            this.getHole(startHoleId);
+
+        const end =
+            this.getHole(endHoleId);
+
+        if (!start || !end) {
+
+            return {
+
+                success: false,
+
+                message: 'One or both holes do not exist.'
+
+            };
+        }
+
+        if (startHoleId === endHoleId) {
+
+            return {
+
+                success: false,
+
+                message: 'Cannot connect a hole to itself.'
+
+            };
+        }
+
+        this.connections.set(connectionId, {
+
+            id: connectionId,
+
+            startHoleId,
+
+            endHoleId,
+
+            startNode: start.nodeId,
+
+            endNode: end.nodeId,
+
+            color,
+
+            type: 'jumper-wire'
+
+        });
+
+        return {
+
+            success: true,
+
+            connectionId,
+
+            startNode: start.nodeId,
+
+            endNode: end.nodeId
+
+        };
+    }
+
+
+    /* ================================================
+       REMOVE CONNECTION
+    ================================================ */
+
+    removeConnection(connectionId) {
+
+        return this.connections.delete(
+            connectionId
+        );
+    }
+
+
+    /* ================================================
+       GET NODE CONNECTIONS
+    ================================================ */
+
+    getNodeConnections(nodeId) {
+
+        const result = [];
+
+        for (const component of this.components.values()) {
+
+            for (const terminal of component.terminals) {
+
+                if (terminal.nodeId === nodeId) {
+
+                    result.push({
+
+                        type: 'component',
+
+                        componentId: component.id,
+
+                        terminalId: terminal.id
+
+                    });
+                }
+            }
+        }
+
+        for (const wire of this.connections.values()) {
+
+            if (
+                wire.startNode === nodeId ||
+                wire.endNode === nodeId
+            ) {
+
+                result.push({
+
+                    type: 'wire',
+
+                    connectionId: wire.id
+
+                });
+            }
+        }
+
+        return result;
+    }
+
+
+    /* ================================================
+       ELECTRICAL NODE CHECK
+    ================================================ */
+
+    areSameNode(firstHoleId, secondHoleId) {
+
+        const first =
+            this.getHole(firstHoleId);
+
+        const second =
+            this.getHole(secondHoleId);
+
+        if (!first || !second) {
+            return false;
+        }
+
+        return first.nodeId === second.nodeId;
+    }
+
+
+    /* ================================================
+       GET BOARD DATA
+    ================================================ */
+
+    getBoardData() {
+
+        return {
+
+            totalHoles: this.holes.size,
+
+            totalNodes: this.nodes.size,
+
+            totalComponents:
+                this.components.size,
+
+            totalConnections:
+                this.connections.size
+
+        };
+    }
+
+
+    /* ================================================
+       RESET
+    ================================================ */
+
+    reset() {
+
+        this.components.clear();
+
+        this.connections.clear();
+
+        this.initialize();
+    }
+
 }
 
 
-/* ---------- Create Breadboard Hole Markers ---------- */
+/* =====================================================
+   CREATE THREE.JS HOLE MARKERS
+===================================================== */
 
 export function createHoleMarkers(
     scene,
     options = {}
 ) {
 
-    const {
-        radius = 0.045,
-        color = 0x073d32,
-        visible = false
-    } = options;
+    const board =
+        new BreadboardSystem();
 
-    const group = new THREE.Group();
-
-    const geometry = new THREE.CylinderGeometry(
-        radius,
-        radius,
-        0.018,
-        12
-    );
-
-    const material = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.85
-    });
-
-    const holeMap = generateHoleMap();
-
-    holeMap.forEach(hole => {
-
-        const marker = new THREE.Mesh(
-            geometry,
-            material
-        );
-
-        marker.position.set(
-            hole.position.x,
-            hole.position.y + 0.015,
-            hole.position.z
-        );
-
-        marker.userData = {
-            type: 'breadboard-hole',
-            holeId: hole.id,
-            row: hole.row,
-            column: hole.column,
-            group: hole.group
-        };
-
-        group.add(marker);
-    });
-
-    group.visible = visible;
-
-    if (scene) {
-        scene.add(group);
-    }
-
-    return group;
-}
-
-
-/* ---------- Find Holes in Same Row ---------- */
-
-export function getRowHoles(row, side = 'upper') {
-
-    const columns = side === 'upper'
-        ? [1, 2, 3, 4, 5]
-        : [6, 7, 8, 9, 10];
-
-    return columns.map(column => {
-
-        const position = getHolePosition(
-            row,
-            column
-        );
-
-        if (!position) {
-            return null;
-        }
-
-        return {
-            row,
-            column,
-            position
-        };
-
-    }).filter(Boolean);
-}
-
-
-/* ---------- Breadboard Connection Checker ---------- */
-
-export function checkConnection(
-    first,
-    second
-) {
-
-    const connected = areHolesConnected(
-        first,
-        second
-    );
+    const group =
+        new THREE_GROUP_PLACEHOLDER();
 
     return {
-        connected,
-
-        message: connected
-            ? 'These holes belong to the same internal terminal strip.'
-            : 'These holes are electrically separate.'
+        board,
+        group
     };
 }
-
-
-/* ---------- Export Breadboard API ---------- */
-
-export const Breadboard = {
-
-    config: BREADBOARD_CONFIG,
-
-    getHolePosition,
-
-    getTerminalName,
-
-    getConnectedGroup,
-
-    areHolesConnected,
-
-    isValidHole,
-
-    generateHoleMap,
-
-    getPowerRailPosition,
-
-    createHoleMarkers,
-
-    getRowHoles,
-
-    checkConnection
-};
-
-export default Breadboard;
