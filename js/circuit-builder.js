@@ -1,801 +1,726 @@
-
-/* =====================================================
-   ZENER-LAB-360
-   FILE: js/circuit-builder.js
-
-   Interactive 3D Circuit Builder
-   Component Placement
-   Jumper Wire Connections
-===================================================== */
-
 import * as THREE from 'three';
-
 import { BreadboardSystem } from './breadboard.js';
 
-
 export class CircuitBuilder {
-
     constructor(scene, options = {}) {
-
         this.scene = scene;
-
-        this.options = {
-
-            snapDistance: 0.45,
-
-            wireHeight: 0.34,
-
-            defaultWireColor: '#ef4444',
-
-            ...options
-
-        };
-
-        this.board =
-            options.board || new BreadboardSystem();
+        this.board = options.board || new BreadboardSystem();
 
         this.components = new Map();
-
         this.wires = new Map();
 
         this.selectedComponent = null;
+        this.selectedTerminal = null;
+        this.draggedComponent = null;
 
-        this.selectedHole = null;
+        this.wireCounter = 0;
+        this.listeners = new Map();
 
-        this.isDragging = false;
+        this.wireMaterialDefaults = {
+            red: 0xef4444,
+            black: 0x202938,
+            blue: 0x2563eb,
+            yellow: 0xfacc15,
+            green: 0x22c55e
+        };
+
+        this.raycaster = new THREE.Raycaster();
+        this.pointer = new THREE.Vector2();
 
         this.dragPlane = new THREE.Plane(
             new THREE.Vector3(0, 1, 0),
-            -0.25
+            0
         );
-
-        this.raycaster = new THREE.Raycaster();
-
-        this.pointer = new THREE.Vector2();
 
         this.dragOffset = new THREE.Vector3();
-
-        this.callbacks = {};
-
-        this.createWireMaterials();
     }
 
+    /* =====================================
+       COMPONENT REGISTRATION
+       ===================================== */
 
-    /* ================================================
-       WIRE MATERIALS
-    ================================================ */
-
-    createWireMaterials() {
-
-        this.wireMaterials = {
-
-            red: new THREE.MeshStandardMaterial({
-                color: '#ef4444',
-                roughness: 0.4
-            }),
-
-            black: new THREE.MeshStandardMaterial({
-                color: '#171717',
-                roughness: 0.4
-            }),
-
-            yellow: new THREE.MeshStandardMaterial({
-                color: '#facc15',
-                roughness: 0.4
-            }),
-
-            green: new THREE.MeshStandardMaterial({
-                color: '#22c55e',
-                roughness: 0.4
-            })
-
-        };
-    }
-
-
-    /* ================================================
-       REGISTER COMPONENT
-    ================================================ */
-
-    addComponent(
-        id,
-        object,
-        terminals = []
-    ) {
-
+    addComponent(id, object, terminals = []) {
         if (!id || !object) {
-            return false;
+            throw new Error('Component ID and object are required.');
         }
 
-        const terminalList = terminals.map(
-            (terminal, index) => ({
+        object.userData.componentId = id;
+        object.userData.isCircuitComponent = true;
 
-                id:
-                    terminal.id ||
-                    `terminal-${index + 1}`,
+        if (!this.scene.children.includes(object)) {
+            this.scene.add(object);
+        }
 
-                localPosition:
-                    terminal.localPosition
-                        ? new THREE.Vector3(
-                            ...terminal.localPosition
-                        )
-                        : new THREE.Vector3(
-                            index === 0 ? -0.15 : 0.15,
-                            0,
-                            0
-                        ),
+        const terminalMap = new Map();
 
-                holeId: null
+        object.traverse(child => {
+            if (child.userData?.isTerminal) {
+                child.userData.componentId = id;
 
-            })
-        );
+                terminalMap.set(
+                    child.userData.terminalId,
+                    child
+                );
+            }
+        });
 
-        const record = {
+        // Also accept terminal descriptions supplied by laboratory.js.
+        terminals.forEach(terminal => {
+            if (terminal?.id && terminal?.object) {
+                terminal.object.userData.isTerminal = true;
+                terminal.object.userData.componentId = id;
+                terminal.object.userData.terminalId = terminal.id;
 
+                terminalMap.set(terminal.id, terminal.object);
+            }
+        });
+
+        this.components.set(id, {
             id,
-
             object,
-
-            terminals: terminalList,
-
+            terminals: terminalMap,
             placed: false
+        });
 
-        };
+        this.notify('componentAdded', { id, object });
 
-        this.components.set(id, record);
-
-        object.userData.circuitComponentId = id;
-
-        object.userData.selectable = true;
-
-        this.scene.add(object);
-
-        this.board.registerComponent(
-            id,
-            terminalList
-        );
-
-        return record;
+        return object;
     }
 
+    getComponent(id) {
+        return this.components.get(id) || null;
+    }
 
-    /* ================================================
-       SELECT COMPONENT
-    ================================================ */
+    getTerminal(componentId, terminalId) {
+        const component = this.components.get(componentId);
+
+        if (!component) return null;
+
+        return component.terminals.get(terminalId) || null;
+    }
+
+    getTerminalPosition(componentId, terminalId) {
+        const terminal = this.getTerminal(componentId, terminalId);
+
+        if (!terminal) return null;
+
+        const position = new THREE.Vector3();
+        terminal.getWorldPosition(position);
+
+        return position;
+    }
+
+    /* =====================================
+       COMPONENT SELECTION
+       ===================================== */
 
     selectComponent(id) {
+        const component = this.components.get(id);
 
-        const component =
-            this.components.get(id);
+        if (!component) return false;
 
-        if (!component) {
-            return false;
-        }
+        this.selectedComponent = id;
 
-        this.selectedComponent = component;
-
-        this.notify('componentSelected', component);
-
-        return true;
-    }
-
-
-    /* ================================================
-       START DRAG
-    ================================================ */
-
-    startDrag(
-        event,
-        camera,
-        canvas
-    ) {
-
-        const component =
-            this.getComponentFromPointer(
-                event,
-                camera,
-                canvas
-            );
-
-        if (!component) {
-            return false;
-        }
-
-        this.selectComponent(component.id);
-
-        this.isDragging = true;
-
-        const point =
-            this.getPointerOnBoard(
-                event,
-                camera,
-                canvas
-            );
-
-        if (point) {
-
-            this.dragOffset.subVectors(
-                component.object.position,
-                point
-            );
-
-        }
+        this.notify('componentSelected', {
+            id,
+            object: component.object
+        });
 
         return true;
     }
 
-
-    /* ================================================
-       MOVE DRAGGED COMPONENT
-    ================================================ */
-
-    moveDrag(
-        event,
-        camera,
-        canvas
-    ) {
-
-        if (
-            !this.isDragging ||
-            !this.selectedComponent
-        ) {
-            return false;
-        }
-
-        const point =
-            this.getPointerOnBoard(
-                event,
-                camera,
-                canvas
-            );
-
-        if (!point) {
-            return false;
-        }
-
-        const component =
-            this.selectedComponent;
-
-        component.object.position.copy(
-            point.add(this.dragOffset)
-        );
-
-        component.object.position.y = 0.28;
-
-        this.notify(
-            'componentMoved',
-            component
-        );
-
-        return true;
-    }
-
-
-    /* ================================================
-       END DRAG AND SNAP
-    ================================================ */
-
-    endDrag() {
-
-        if (!this.isDragging) {
-            return false;
-        }
-
-        this.isDragging = false;
-
-        if (!this.selectedComponent) {
-            return false;
-        }
-
-        const position =
-            this.selectedComponent.object.position;
-
-        const nearest =
-            this.board.findNearestHole(
-                position,
-                this.options.snapDistance
-            );
-
-        if (nearest) {
-
-            this.selectedComponent.object.position.set(
-                nearest.x,
-                0.28,
-                nearest.z
-            );
-
-            this.selectedComponent.placed = true;
-
-            this.notify(
-                'componentSnapped',
-                {
-                    component: this.selectedComponent,
-                    hole: nearest
-                }
-            );
-
-        }
-
-        return true;
-    }
-
-
-    /* ================================================
-       POINTER RAYCAST
-    ================================================ */
-
-    updatePointer(event, canvas) {
-
-        const rect =
-            canvas.getBoundingClientRect();
-
-        this.pointer.x =
-            ((event.clientX - rect.left) /
-            rect.width) * 2 - 1;
-
-        this.pointer.y =
-            -((event.clientY - rect.top) /
-            rect.height) * 2 + 1;
-    }
-
-
-    getComponentFromPointer(
-        event,
-        camera,
-        canvas
-    ) {
-
-        this.updatePointer(event, canvas);
-
-        this.raycaster.setFromCamera(
-            this.pointer,
-            camera
-        );
-
-        const objects = [];
-
-        for (const component of this.components.values()) {
-
-            objects.push(component.object);
-
-        }
-
-        const hits =
-            this.raycaster.intersectObjects(
-                objects,
-                true
-            );
-
-        if (!hits.length) {
-            return null;
-        }
-
-        let object = hits[0].object;
-
-        while (
-            object &&
-            !object.userData.circuitComponentId
-        ) {
-
-            object = object.parent;
-
-        }
-
-        if (!object) {
-            return null;
-        }
-
-        return this.components.get(
-            object.userData.circuitComponentId
-        ) || null;
-    }
-
-
-    /* ================================================
-       POINTER POSITION ON BOARD
-    ================================================ */
-
-    getPointerOnBoard(
-        event,
-        camera,
-        canvas
-    ) {
-
-        this.updatePointer(event, canvas);
-
-        this.raycaster.setFromCamera(
-            this.pointer,
-            camera
-        );
-
-        const point =
-            new THREE.Vector3();
-
-        const hit =
-            this.raycaster.ray.intersectPlane(
-                this.dragPlane,
-                point
-            );
-
-        return hit ? point : null;
-    }
-
-
-    /* ================================================
-       ROTATE COMPONENT
-    ================================================ */
-
-    rotateComponent(id, angle = Math.PI / 2) {
-
-        const component =
-            this.components.get(id);
-
-        if (!component) {
-            return false;
-        }
-
-        component.object.rotation.y += angle;
-
-        this.notify(
-            'componentRotated',
-            component
-        );
-
-        return true;
-    }
-
-
-    /* ================================================
-       PLACE TERMINAL
-    ================================================ */
-
-    placeTerminal(
-        componentId,
-        terminalId,
-        holeId
-    ) {
-
-        const component =
-            this.components.get(componentId);
-
-        if (!component) {
-            return {
-                success: false,
-                message: 'Component not found.'
-            };
-        }
-
-        const terminal =
-            component.terminals.find(
-                item => item.id === terminalId
-            );
+    selectTerminal(componentId, terminalId) {
+        const terminal = this.getTerminal(componentId, terminalId);
 
         if (!terminal) {
-            return {
-                success: false,
+            this.notify('error', {
                 message: 'Terminal not found.'
-            };
+            });
+
+            return false;
         }
 
-        const hole =
-            this.board.getHole(holeId);
+        this.selectedTerminal = {
+            type: 'terminal',
+            componentId,
+            terminalId
+        };
 
-        if (!hole) {
-            return {
-                success: false,
-                message: 'Hole not found.'
-            };
-        }
+        this.notify('terminalSelected', this.selectedTerminal);
 
-        const result =
-            this.board.placeTerminal(
-                componentId,
-                terminalId,
-                holeId
-            );
-
-        if (result.success) {
-
-            terminal.holeId = holeId;
-
-        }
-
-        return result;
+        return true;
     }
 
+    selectHole(holeId) {
+        const hole = this.board.getHole(holeId);
 
-    /* ================================================
-       CONNECT TWO HOLES
-    ================================================ */
+        if (!hole) {
+            this.notify('error', {
+                message: 'Breadboard hole not found.'
+            });
 
-    connectHoles(
-        startHoleId,
-        endHoleId,
-        color = 'red'
-    ) {
-
-        const id =
-            `wire-${Date.now()}-${Math.random()
-                .toString(36)
-                .slice(2, 7)}`;
-
-        const result =
-            this.board.connectHoles(
-                id,
-                startHoleId,
-                endHoleId,
-                color
-            );
-
-        if (!result.success) {
-            return result;
+            return false;
         }
 
-        const start =
-            this.board.getHolePosition(
-                startHoleId
+        this.selectedTerminal = {
+            type: 'hole',
+            holeId
+        };
+
+        this.notify('holeSelected', this.selectedTerminal);
+
+        return true;
+    }
+
+    clearSelection() {
+        this.selectedTerminal = null;
+        this.selectedComponent = null;
+
+        this.notify('selectionCleared', {});
+    }
+
+    /* =====================================
+       ENDPOINT HELPERS
+       ===================================== */
+
+    getEndpointPosition(endpoint) {
+        if (!endpoint) return null;
+
+        if (endpoint.type === 'hole') {
+            return this.board.getHolePosition(endpoint.holeId);
+        }
+
+        if (endpoint.type === 'terminal') {
+            return this.getTerminalPosition(
+                endpoint.componentId,
+                endpoint.terminalId
             );
+        }
 
-        const end =
-            this.board.getHolePosition(
-                endHoleId
-            );
+        return null;
+    }
 
-        const wire =
-            this.createWire(
-                start,
-                end,
-                color
-            );
-
-        wire.userData.connectionId = id;
-
-        this.scene.add(wire);
-
-        this.wires.set(id, wire);
-
+    createTerminalEndpoint(componentId, terminalId) {
         return {
-
-            success: true,
-
-            id,
-
-            wire,
-
-            ...result
-
+            type: 'terminal',
+            componentId,
+            terminalId
         };
     }
 
+    createHoleEndpoint(holeId) {
+        return {
+            type: 'hole',
+            holeId
+        };
+    }
 
-    /* ================================================
-       CREATE 3D WIRE
-    ================================================ */
+    endpointsAreSame(a, b) {
+        if (!a || !b || a.type !== b.type) return false;
 
-    createWire(start, end, color = 'red') {
+        if (a.type === 'hole') {
+            return a.holeId === b.holeId;
+        }
 
-        const startPoint =
-            new THREE.Vector3(
-                start.x,
-                this.options.wireHeight,
-                start.z
+        return (
+            a.componentId === b.componentId &&
+            a.terminalId === b.terminalId
+        );
+    }
+
+    /* =====================================
+       WIRE CONNECTIONS
+       ===================================== */
+
+    connectTerminals(
+        componentA,
+        terminalA,
+        componentB,
+        terminalB,
+        color = 'red'
+    ) {
+        return this.connectEndpoints(
+            this.createTerminalEndpoint(componentA, terminalA),
+            this.createTerminalEndpoint(componentB, terminalB),
+            color
+        );
+    }
+
+    connectTerminalToHole(
+        componentId,
+        terminalId,
+        holeId,
+        color = 'red'
+    ) {
+        return this.connectEndpoints(
+            this.createTerminalEndpoint(componentId, terminalId),
+            this.createHoleEndpoint(holeId),
+            color
+        );
+    }
+
+    connectHoles(startHoleId, endHoleId, color = 'red') {
+        return this.connectEndpoints(
+            this.createHoleEndpoint(startHoleId),
+            this.createHoleEndpoint(endHoleId),
+            color
+        );
+    }
+
+    connectEndpoints(start, end, color = 'red') {
+        if (this.endpointsAreSame(start, end)) {
+            this.notify('error', {
+                message: 'A wire needs two different endpoints.'
+            });
+
+            return null;
+        }
+
+        const startPosition = this.getEndpointPosition(start);
+        const endPosition = this.getEndpointPosition(end);
+
+        if (!startPosition || !endPosition) {
+            this.notify('error', {
+                message: 'One or both connection points are invalid.'
+            });
+
+            return null;
+        }
+
+        // Prevent duplicate direct connections.
+        const duplicate = [...this.wires.values()].some(wire => {
+            return (
+                (
+                    this.endpointsAreSame(wire.start, start) &&
+                    this.endpointsAreSame(wire.end, end)
+                ) ||
+                (
+                    this.endpointsAreSame(wire.start, end) &&
+                    this.endpointsAreSame(wire.end, start)
+                )
             );
+        });
 
-        const endPoint =
-            new THREE.Vector3(
-                end.x,
-                this.options.wireHeight,
-                end.z
-            );
+        if (duplicate) {
+            this.notify('error', {
+                message: 'These two points are already connected.'
+            });
 
-        const middlePoint =
-            new THREE.Vector3(
-                (start.x + end.x) / 2,
-                this.options.wireHeight + 0.22,
-                (start.z + end.z) / 2
-            );
+            return null;
+        }
 
-        const curve =
-            new THREE.QuadraticBezierCurve3(
-                startPoint,
-                middlePoint,
-                endPoint
-            );
+        const wireId = `wire-${++this.wireCounter}`;
 
-        const geometry =
-            new THREE.TubeGeometry(
-                curve,
-                32,
-                0.025,
-                8,
-                false
-            );
+        const wire = this.createWire(
+            wireId,
+            startPosition,
+            endPosition,
+            color
+        );
 
-        const material =
-            this.wireMaterials[color] ||
-            this.wireMaterials.red;
+        if (!wire) return null;
 
-        const wire =
-            new THREE.Mesh(
-                geometry,
-                material
-            );
+        wire.userData.start = start;
+        wire.userData.end = end;
 
-        wire.userData.isJumperWire = true;
+        this.wires.set(wireId, {
+            id: wireId,
+            object: wire,
+            start,
+            end,
+            color
+        });
+
+        // Register a breadboard-to-breadboard connection in the board model.
+        if (start.type === 'hole' && end.type === 'hole') {
+            this.board.connectHoles(start.holeId, end.holeId);
+        }
+
+        this.notify('wireAdded', {
+            id: wireId,
+            start,
+            end,
+            color
+        });
+
+        this.notify('circuitChanged', this.getConnectionData());
+
+        return wireId;
+    }
+
+    createWire(id, startPosition, endPosition, color = 'red') {
+        const start = startPosition.clone();
+        const end = endPosition.clone();
+
+        const distance = start.distanceTo(end);
+
+        if (distance < 0.001) return null;
+
+        const lift = Math.max(0.12, distance * 0.12);
+
+        const middle = start.clone().add(end).multiplyScalar(0.5);
+        middle.y += lift;
+
+        const curve = new THREE.QuadraticBezierCurve3(
+            start,
+            middle,
+            end
+        );
+
+        const geometry = new THREE.TubeGeometry(
+            curve,
+            24,
+            0.025,
+            8,
+            false
+        );
+
+        const wireColor =
+            this.wireMaterialDefaults[color] ??
+            (typeof color === 'number' ? color : 0xef4444);
+
+        const material = new THREE.MeshStandardMaterial({
+            color: wireColor,
+            metalness: 0.15,
+            roughness: 0.35
+        });
+
+        const wire = new THREE.Mesh(geometry, material);
+
+        wire.name = id;
+        wire.userData.isWire = true;
+
+        this.scene.add(wire);
 
         return wire;
     }
 
-
-    /* ================================================
-       DELETE WIRE
-    ================================================ */
-
     removeWire(id) {
+        const wire = this.wires.get(id);
 
-        const wire =
-            this.wires.get(id);
+        if (!wire) return false;
 
-        if (!wire) {
-            return false;
+        this.scene.remove(wire.object);
+
+        wire.object.geometry.dispose();
+        wire.object.material.dispose();
+
+        if (
+            wire.start.type === 'hole' &&
+            wire.end.type === 'hole'
+        ) {
+            this.board.removeConnection(
+                wire.start.holeId,
+                wire.end.holeId
+            );
         }
-
-        this.scene.remove(wire);
-
-        wire.geometry.dispose();
 
         this.wires.delete(id);
 
-        this.board.removeConnection(id);
+        this.notify('wireRemoved', { id });
+        this.notify('circuitChanged', this.getConnectionData());
 
         return true;
     }
 
+    removeLastWire() {
+        const ids = [...this.wires.keys()];
 
-    /* ================================================
-       DELETE COMPONENT
-    ================================================ */
+        if (!ids.length) return false;
 
-    removeComponent(id) {
+        return this.removeWire(ids[ids.length - 1]);
+    }
 
-        const component =
-            this.components.get(id);
+    /* =====================================
+       WIRE SELECTION WORKFLOW
+       ===================================== */
 
-        if (!component) {
-            return false;
+    connectSelectedEndpoint(endpoint, color = 'red') {
+        if (!this.selectedTerminal) {
+            this.selectedTerminal = endpoint;
+
+            this.notify('endpointSelected', endpoint);
+
+            return {
+                success: true,
+                waitingForSecondPoint: true
+            };
         }
 
-        this.scene.remove(component.object);
+        const first = this.selectedTerminal;
 
-        this.components.delete(id);
+        const wireId = this.connectEndpoints(
+            first,
+            endpoint,
+            color
+        );
 
-        if (this.selectedComponent?.id === id) {
+        this.selectedTerminal = null;
 
-            this.selectedComponent = null;
+        return {
+            success: Boolean(wireId),
+            wireId
+        };
+    }
 
+    /* =====================================
+       DRAG AND DROP
+       ===================================== */
+
+    getPointer(event, canvas) {
+        const rect = canvas.getBoundingClientRect();
+
+        this.pointer.x =
+            ((event.clientX - rect.left) / rect.width) * 2 - 1;
+
+        this.pointer.y =
+            -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    }
+
+    getComponentFromPointer(event, camera, canvas) {
+        this.getPointer(event, canvas);
+
+        this.raycaster.setFromCamera(this.pointer, camera);
+
+        const objects = [...this.components.values()]
+            .map(item => item.object);
+
+        const hits = this.raycaster.intersectObjects(objects, true);
+
+        for (const hit of hits) {
+            let object = hit.object;
+
+            while (object && !object.userData?.componentId) {
+                object = object.parent;
+            }
+
+            if (object?.userData?.componentId) {
+                return object;
+            }
         }
 
-        this.notify(
-            'componentRemoved',
-            id
+        return null;
+    }
+
+    startDrag(event, camera, canvas) {
+        const component = this.getComponentFromPointer(
+            event,
+            camera,
+            canvas
+        );
+
+        if (!component) return false;
+
+        this.draggedComponent = component;
+
+        const hit = this.getPointerOnBoard(event, camera, canvas);
+
+        if (hit) {
+            this.dragOffset
+                .copy(component.position)
+                .sub(hit);
+        } else {
+            this.dragOffset.set(0, 0, 0);
+        }
+
+        this.notify('dragStart', {
+            id: component.userData.componentId
+        });
+
+        return true;
+    }
+
+    getPointerOnBoard(event, camera, canvas) {
+        this.getPointer(event, canvas);
+
+        this.raycaster.setFromCamera(this.pointer, camera);
+
+        const point = new THREE.Vector3();
+
+        const plane = new THREE.Plane(
+            new THREE.Vector3(0, 1, 0),
+            -0.12
+        );
+
+        const hit = this.raycaster.ray.intersectPlane(
+            plane,
+            point
+        );
+
+        return hit ? point : null;
+    }
+
+    moveDrag(event, camera, canvas) {
+        if (!this.draggedComponent) return false;
+
+        const point = this.getPointerOnBoard(
+            event,
+            camera,
+            canvas
+        );
+
+        if (!point) return false;
+
+        this.draggedComponent.position.copy(
+            point.add(this.dragOffset)
         );
 
         return true;
     }
 
+    endDrag() {
+        if (!this.draggedComponent) return false;
 
-    /* ================================================
-       CONNECTION INFORMATION
-    ================================================ */
+        const id = this.draggedComponent.userData.componentId;
+        const component = this.components.get(id);
+
+        if (component) {
+            component.placed = true;
+        }
+
+        this.notify('dragEnd', { id });
+
+        this.draggedComponent = null;
+
+        return true;
+    }
+
+    rotateComponent(id, angle = Math.PI / 2) {
+        const component = this.components.get(id);
+
+        if (!component) return false;
+
+        component.object.rotation.y += angle;
+
+        this.notify('componentRotated', { id, angle });
+
+        return true;
+    }
+
+    /* =====================================
+       COMPONENT REMOVAL
+       ===================================== */
+
+    removeComponent(id) {
+        const component = this.components.get(id);
+
+        if (!component) return false;
+
+        const attachedWires = [...this.wires.values()]
+            .filter(wire => {
+                return (
+                    (wire.start.type === 'terminal' &&
+                        wire.start.componentId === id) ||
+                    (wire.end.type === 'terminal' &&
+                        wire.end.componentId === id)
+                );
+            })
+            .map(wire => wire.id);
+
+        attachedWires.forEach(wireId => this.removeWire(wireId));
+
+        this.scene.remove(component.object);
+
+        component.object.traverse(child => {
+            if (child.geometry) child.geometry.dispose();
+        });
+
+        this.components.delete(id);
+
+        this.notify('componentRemoved', { id });
+
+        return true;
+    }
+
+    /* =====================================
+       CIRCUIT DATA
+       ===================================== */
 
     getConnectionData() {
+        return [...this.wires.values()].map(wire => ({
+            id: wire.id,
+            start: { ...wire.start },
+            end: { ...wire.end },
+            color: wire.color
+        }));
+    }
 
+    getComponentData() {
+        return [...this.components.values()].map(component => ({
+            id: component.id,
+            type: component.object.userData.componentType,
+            terminals: [...component.terminals.keys()],
+            placed: component.placed
+        }));
+    }
+
+    getCircuitSummary() {
         return {
-
-            components:
-                Array.from(
-                    this.components.values()
-                ).map(component => ({
-
-                    id: component.id,
-
-                    placed: component.placed,
-
-                    terminals:
-                        component.terminals.map(terminal => ({
-
-                            id: terminal.id,
-
-                            holeId: terminal.holeId
-
-                        }))
-
-                })),
-
-            wires:
-                Array.from(
-                    this.board.connections.values()
-                ),
-
-            board:
-                this.board.getBoardData()
-
+            componentCount: this.components.size,
+            wireCount: this.wires.size,
+            components: this.getComponentData(),
+            connections: this.getConnectionData()
         };
     }
 
-
-    /* ================================================
-       EVENT CALLBACKS
-    ================================================ */
+    /* =====================================
+       EVENT SYSTEM
+       ===================================== */
 
     on(eventName, callback) {
-
-        if (typeof callback === 'function') {
-
-            this.callbacks[eventName] = callback;
-
+        if (!this.listeners.has(eventName)) {
+            this.listeners.set(eventName, []);
         }
-    }
 
+        this.listeners.get(eventName).push(callback);
+
+        return () => {
+            const callbacks = this.listeners.get(eventName) || [];
+
+            this.listeners.set(
+                eventName,
+                callbacks.filter(item => item !== callback)
+            );
+        };
+    }
 
     notify(eventName, data) {
+        const callbacks = this.listeners.get(eventName) || [];
 
-        this.callbacks[eventName]?.(data);
+        callbacks.forEach(callback => {
+            try {
+                callback(data);
+            } catch (error) {
+                console.error(
+                    `CircuitBuilder event error (${eventName}):`,
+                    error
+                );
+            }
+        });
     }
 
-
-    /* ================================================
-       RESET CIRCUIT
-    ================================================ */
+    /* =====================================
+       RESET AND DISPOSE
+       ===================================== */
 
     reset() {
-
-        for (const wire of this.wires.values()) {
-
-            this.scene.remove(wire);
-
-            wire.geometry.dispose();
-
-        }
-
-        this.wires.clear();
-
-        for (const component of this.components.values()) {
-
-            this.scene.remove(component.object);
-
-        }
-
-        this.components.clear();
-
-        this.board.reset();
+        [...this.wires.keys()].forEach(id => this.removeWire(id));
 
         this.selectedComponent = null;
+        this.selectedTerminal = null;
+        this.draggedComponent = null;
 
-        this.selectedHole = null;
-
-        this.isDragging = false;
-
-        this.notify('circuitReset', true);
-
+        this.notify('reset', {});
     }
-
-
-    /* ================================================
-       DISPOSE
-    ================================================ */
 
     dispose() {
-
         this.reset();
 
-        for (const material of
-            Object.values(this.wireMaterials)) {
+        this.components.forEach(component => {
+            this.scene.remove(component.object);
+        });
 
-            material.dispose();
-
-        }
-
+        this.components.clear();
+        this.listeners.clear();
     }
-
 }
