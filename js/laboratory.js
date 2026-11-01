@@ -1,22 +1,22 @@
 
-/* =========================================
+/* =====================================================
    ZENER-LAB-360
-   FILE: laboratory.js
+   FILE: js/laboratory.js
 
-   Main Laboratory Controller
-========================================= */
+   Updated Main Laboratory Controller
+   Supports:
+   1. Forward Bias
+   2. Reverse Bias
+   3. Load Regulation
+===================================================== */
 
-import * as THREE from
-    'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+import * as THREE from 'three';
 
 import { OrbitControls } from
-    'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/controls/OrbitControls.js';
+    'three/addons/controls/OrbitControls.js';
 
 import {
-    createBreadboard
-} from './components.js';
-
-import {
+    createBreadboard,
     createComponent
 } from './components.js';
 
@@ -41,9 +41,9 @@ import {
 } from './viva.js';
 
 
-/* =========================================
-   1. LABORATORY CONTROLLER
-========================================= */
+/* =====================================================
+   1. MAIN CLASS
+===================================================== */
 
 class ZenerLaboratory {
 
@@ -53,10 +53,7 @@ class ZenerLaboratory {
             document.getElementById('three-container');
 
         if (!this.container) {
-            console.error(
-                '3D viewport #three-container not found.'
-            );
-
+            console.error('3D viewport not found.');
             return;
         }
 
@@ -74,17 +71,19 @@ class ZenerLaboratory {
 
         this.observations = [];
 
+        this.lastResult = null;
+
         this.mode = this.detectExperimentMode();
 
-        this.isRunning = false;
+        this.holeMarkers = null;
 
         this.animationFrame = null;
+
+        this.resizeObserver = null;
 
         this.raycaster = new THREE.Raycaster();
 
         this.pointer = new THREE.Vector2();
-
-        this.selectedObject = null;
 
         this.clock = new THREE.Clock();
 
@@ -92,13 +91,14 @@ class ZenerLaboratory {
     }
 
 
-    /* =====================================
-       2. DETECT EXPERIMENT MODE
-    ===================================== */
+    /* =================================================
+       2. EXPERIMENT MODE
+    ================================================= */
 
     detectExperimentMode() {
 
-        const path = window.location.pathname.toLowerCase();
+        const path =
+            window.location.pathname.toLowerCase();
 
         if (path.includes('reverse')) {
             return 'reverse';
@@ -115,54 +115,84 @@ class ZenerLaboratory {
     }
 
 
-    /* =====================================
-       3. INITIALIZE APPLICATION
-    ===================================== */
+    getExperimentTitle() {
 
-    initialize() {
+        const titles = {
+            forward: 'Forward Bias Characteristics',
+            reverse: 'Reverse Bias Characteristics',
+            'load-regulation': 'Zener Diode Load Regulation'
+        };
 
-        this.createScene();
-
-        this.createCamera();
-
-        this.createRenderer();
-
-        this.createLights();
-
-        this.createEnvironment();
-
-        this.createLaboratoryComponents();
-
-        this.createCircuitBuilder();
-
-        this.createSimulation();
-
-        this.createGraph();
-
-        this.createViva();
-
-        this.setupControls();
-
-        this.setupInteractions();
-
-        this.setupResize();
-
-        this.updateExperimentHeading();
-
-        this.hideLoadingScreen();
-
-        this.animate();
-
-        console.log(
-            'ZENER-LAB-360 initialized:',
-            this.mode
-        );
+        return titles[this.mode] || titles.forward;
     }
 
 
-    /* =====================================
-       4. CREATE SCENE
-    ===================================== */
+    /* =================================================
+       3. INITIALIZATION
+    ================================================= */
+
+    initialize() {
+
+        try {
+
+            this.createScene();
+
+            this.createCamera();
+
+            this.createRenderer();
+
+            this.createLights();
+
+            this.createEnvironment();
+
+            this.createLaboratoryComponents();
+
+            this.createCircuitBuilder();
+
+            this.createSimulation();
+
+            this.createGraph();
+
+            this.createViva();
+
+            this.setupCameraControls();
+
+            this.setupControls();
+
+            this.setupInteractions();
+
+            this.setupResize();
+
+            this.updateExperimentHeading();
+
+            this.runSimulation(0);
+
+            this.generateGraph();
+
+            this.hideLoadingScreen();
+
+            this.animate();
+
+            console.log(
+                'ZENER-LAB-360 ready:',
+                this.mode
+            );
+
+        } catch (error) {
+
+            console.error(
+                'Laboratory initialization error:',
+                error
+            );
+
+            this.showLoadingError();
+        }
+    }
+
+
+    /* =================================================
+       4. THREE.JS SCENE
+    ================================================= */
 
     createScene() {
 
@@ -173,15 +203,15 @@ class ZenerLaboratory {
 
         this.scene.fog = new THREE.Fog(
             0x101a2a,
-            22,
-            55
+            25,
+            60
         );
     }
 
 
-    /* =====================================
-       5. CREATE CAMERA
-    ===================================== */
+    /* =================================================
+       5. CAMERA
+    ================================================= */
 
     createCamera() {
 
@@ -204,17 +234,13 @@ class ZenerLaboratory {
             12
         );
 
-        this.camera.lookAt(
-            0,
-            0,
-            0
-        );
+        this.camera.lookAt(0, 0, 0);
     }
 
 
-    /* =====================================
-       6. CREATE RENDERER
-    ===================================== */
+    /* =================================================
+       6. RENDERER
+    ================================================= */
 
     createRenderer() {
 
@@ -224,10 +250,7 @@ class ZenerLaboratory {
         });
 
         this.renderer.setPixelRatio(
-            Math.min(
-                window.devicePixelRatio || 1,
-                2
-            )
+            Math.min(window.devicePixelRatio || 1, 2)
         );
 
         this.renderer.setSize(
@@ -252,20 +275,17 @@ class ZenerLaboratory {
             this.renderer.domElement
         );
 
-        this.renderer.domElement.style.display =
-            'block';
+        this.renderer.domElement.style.width = '100%';
 
-        this.renderer.domElement.style.width =
-            '100%';
+        this.renderer.domElement.style.height = '100%';
 
-        this.renderer.domElement.style.height =
-            '100%';
+        this.renderer.domElement.style.display = 'block';
     }
 
 
-    /* =====================================
-       7. CREATE LIGHTS
-    ===================================== */
+    /* =================================================
+       7. LIGHTING
+    ================================================= */
 
     createLights() {
 
@@ -276,25 +296,20 @@ class ZenerLaboratory {
 
         this.scene.add(ambient);
 
+
         const mainLight = new THREE.DirectionalLight(
             0xffffff,
             2.5
         );
 
-        mainLight.position.set(
-            8,
-            15,
-            10
-        );
+        mainLight.position.set(8, 15, 10);
 
         mainLight.castShadow = true;
 
-        mainLight.shadow.mapSize.set(
-            2048,
-            2048
-        );
+        mainLight.shadow.mapSize.set(2048, 2048);
 
         this.scene.add(mainLight);
+
 
         const fillLight = new THREE.PointLight(
             0x27d9cf,
@@ -302,47 +317,34 @@ class ZenerLaboratory {
             30
         );
 
-        fillLight.position.set(
-            -8,
-            6,
-            -5
-        );
+        fillLight.position.set(-8, 6, -5);
 
         this.scene.add(fillLight);
+
 
         const backLight = new THREE.DirectionalLight(
             0x568bff,
             1.1
         );
 
-        backLight.position.set(
-            -5,
-            8,
-            8
-        );
+        backLight.position.set(-5, 8, 8);
 
         this.scene.add(backLight);
     }
 
 
-    /* =====================================
-       8. CREATE ENVIRONMENT
-    ===================================== */
+    /* =================================================
+       8. LAB TABLE
+    ================================================= */
 
     createEnvironment() {
 
-        const floorGeometry =
-            new THREE.PlaneGeometry(60, 60);
-
-        const floorMaterial =
+        const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(60, 60),
             new THREE.MeshStandardMaterial({
                 color: 0x172438,
                 roughness: 0.85
-            });
-
-        const floor = new THREE.Mesh(
-            floorGeometry,
-            floorMaterial
+            })
         );
 
         floor.rotation.x = -Math.PI / 2;
@@ -353,26 +355,16 @@ class ZenerLaboratory {
 
         this.scene.add(floor);
 
-        // Laboratory table
-        const tableGeometry =
-            new THREE.BoxGeometry(17, 0.45, 12);
 
-        const tableMaterial =
+        const table = new THREE.Mesh(
+            new THREE.BoxGeometry(17, 0.45, 12),
             new THREE.MeshStandardMaterial({
                 color: 0x28384b,
                 roughness: 0.55
-            });
-
-        const table = new THREE.Mesh(
-            tableGeometry,
-            tableMaterial
+            })
         );
 
-        table.position.set(
-            0,
-            -0.35,
-            0
-        );
+        table.position.set(0, -0.35, 0);
 
         table.receiveShadow = true;
 
@@ -380,7 +372,7 @@ class ZenerLaboratory {
 
         this.scene.add(table);
 
-        // Grid helper
+
         const grid = new THREE.GridHelper(
             50,
             50,
@@ -398,64 +390,43 @@ class ZenerLaboratory {
     }
 
 
-    /* =====================================
-       9. CREATE COMPONENTS
-    ===================================== */
+    /* =================================================
+       9. COMPONENTS
+    ================================================= */
 
     createLaboratoryComponents() {
 
-        // Breadboard
         const breadboard = createBreadboard();
 
-        breadboard.position.set(
-            0,
-            0,
-            0
-        );
+        breadboard.position.set(0, 0, 0);
 
         this.scene.add(breadboard);
 
-        this.components.breadboard =
-            breadboard;
+        this.components.breadboard = breadboard;
 
 
-        // Zener diode
         const diode = createComponent('zener');
 
-        diode.position.set(
-            -1.1,
-            0.35,
-            0
-        );
+        diode.position.set(-1.1, 0.35, 0);
 
         this.scene.add(diode);
 
         this.components.zener = diode;
 
 
-        // Series resistor
         const resistor = createComponent('resistor');
 
-        resistor.position.set(
-            1.1,
-            0.35,
-            0
-        );
+        resistor.position.set(1.1, 0.35, 0);
 
         this.scene.add(resistor);
 
         this.components.resistor = resistor;
 
 
-        // Potentiometer
         const potentiometer =
             createComponent('potentiometer');
 
-        potentiometer.position.set(
-            3,
-            0.35,
-            1.5
-        );
+        potentiometer.position.set(3, 0.35, 1.5);
 
         this.scene.add(potentiometer);
 
@@ -463,112 +434,90 @@ class ZenerLaboratory {
             potentiometer;
 
 
-        // DC power supply
-        const supply =
-            createComponent('dcSupply');
+        const supply = createComponent('dcSupply');
 
-        supply.position.set(
-            -7,
-            0,
-            -1
-        );
+        supply.position.set(-7, 0, -1);
 
         this.scene.add(supply);
 
         this.components.dcSupply = supply;
 
 
-        // Ammeter
-        const ammeter =
-            createComponent('ammeter');
+        const ammeter = createComponent('ammeter');
 
-        ammeter.position.set(
-            -5.5,
-            0,
-            3
-        );
+        ammeter.position.set(-5.5, 0, 3);
 
         this.scene.add(ammeter);
 
         this.components.ammeter = ammeter;
 
 
-        // Voltmeter
-        const voltmeter =
-            createComponent('voltmeter');
+        const voltmeter = createComponent('voltmeter');
 
-        voltmeter.position.set(
-            5.5,
-            0,
-            3
-        );
+        voltmeter.position.set(5.5, 0, 3);
 
         this.scene.add(voltmeter);
 
         this.components.voltmeter = voltmeter;
 
 
-        // Hole markers
-        this.holeMarkers = createHoleMarkers(
-            this.scene,
-            {
-                visible: false
-            }
-        );
+        try {
+
+            this.holeMarkers = createHoleMarkers(
+                this.scene,
+                { visible: false }
+            );
+
+        } catch (error) {
+
+            console.warn(
+                'Breadboard markers unavailable:',
+                error
+            );
+        }
     }
 
 
-    /* =====================================
+    /* =================================================
        10. CIRCUIT BUILDER
-    ===================================== */
+    ================================================= */
 
     createCircuitBuilder() {
 
         this.circuitBuilder =
             new CircuitBuilder(this.scene);
-
-        /*
-          The initial scene shows component models.
-          Circuit Builder can create additional
-          components and jumper wires.
-
-          Actual circuit wiring will be configured
-          in the circuit-building interface.
-        */
     }
 
 
-    /* =====================================
-       11. SIMULATION
-    ===================================== */
+    /* =================================================
+       11. SIMULATION ENGINE
+    ================================================= */
 
     createSimulation() {
 
-        this.simulation =
-            new ZenerSimulation({
+        this.simulation = new ZenerSimulation({
 
-                seriesResistance: 1000,
+            seriesResistance: 1000,
 
-                loadResistance: 1000,
+            loadResistance: 1000,
 
-                zenerVoltage: 5.1,
+            zenerVoltage: 5.1,
 
-                forwardVoltage: 0.7,
+            forwardVoltage: 0.7,
 
-                zenerResistance: 8,
+            zenerResistance: 8,
 
-                maxCurrent: 0.02
-            });
+            maxCurrent: 0.02
 
-        this.simulation.setMode(
-            this.mode
-        );
+        });
+
+        this.simulation.setMode(this.mode);
     }
 
 
-    /* =====================================
+    /* =================================================
        12. GRAPH
-    ===================================== */
+    ================================================= */
 
     createGraph() {
 
@@ -576,55 +525,40 @@ class ZenerLaboratory {
             document.getElementById('viGraph');
 
         if (!canvas) {
-            console.warn(
-                'Graph canvas #viGraph not found.'
-            );
-
+            console.warn('Graph canvas not found.');
             return;
         }
 
-        this.graph = new ExperimentGraph(
-            canvas
+        this.graph = new ExperimentGraph(canvas);
+
+        this.graph.setGraphType(
+            this.mode === 'load-regulation'
+                ? 'load'
+                : 'vi'
         );
-
-        if (this.mode === 'load-regulation') {
-
-            this.graph.setGraphType('load');
-        }
-
-        else {
-
-            this.graph.setGraphType('vi');
-        }
-
-        this.graph.draw();
     }
 
 
-    /* =====================================
-       13. VIVA
-    ===================================== */
+    /* =================================================
+       13. VIVA MODULE
+    ================================================= */
 
     createViva() {
 
-        const vivaContainer =
-            document.getElementById('vivaContainer') ||
-            document.getElementById('viva-content') ||
-            document.querySelector('.viva-content');
+        const container =
+            document.getElementById('vivaContainer');
 
-        if (!vivaContainer) {
+        if (!container) {
             return;
         }
 
-        this.viva = new VivaModule(
-            vivaContainer
-        );
+        this.viva = new VivaModule(container);
     }
 
 
-    /* =====================================
-       14. FIND ELEMENT BY SELECTORS
-    ===================================== */
+    /* =================================================
+       14. DOM SELECTOR HELPER
+    ================================================= */
 
     findElement(...selectors) {
 
@@ -642,17 +576,16 @@ class ZenerLaboratory {
     }
 
 
-    /* =====================================
-       15. SETUP UI CONTROLS
-    ===================================== */
+    /* =================================================
+       15. SETUP CONTROLS
+    ================================================= */
 
     setupControls() {
 
         this.voltageSlider = this.findElement(
             '#voltageSlider',
             '#supplyVoltage',
-            '#voltageRange',
-            'input[type="range"]'
+            '#voltageRange'
         );
 
         this.voltageValue = this.findElement(
@@ -661,13 +594,13 @@ class ZenerLaboratory {
             '[data-voltage-value]'
         );
 
-        this.ammeterDisplay = this.findElement(
+        this.currentDisplay = this.findElement(
             '#currentReading',
             '#ammeterValue',
             '[data-meter="current"]'
         );
 
-        this.voltmeterDisplay = this.findElement(
+        this.voltageDisplay = this.findElement(
             '#voltageReading',
             '#voltmeterValue',
             '[data-meter="voltage"]'
@@ -685,14 +618,28 @@ class ZenerLaboratory {
             '[data-operating-region]'
         );
 
+        this.seriesResistance = this.findElement(
+            '#seriesResistance',
+            '#resistanceSlider'
+        );
+
+        this.loadResistance = this.findElement(
+            '#loadResistance',
+            '#loadSlider'
+        );
+
+        this.resistanceDisplay = this.findElement(
+            '#resistanceDisplay'
+        );
+
+        this.loadResistanceDisplay = this.findElement(
+            '#loadResistanceDisplay'
+        );
+
+
+        /* Voltage slider */
 
         if (this.voltageSlider) {
-
-            this.voltageSlider.min = '0';
-
-            this.voltageSlider.max = '12';
-
-            this.voltageSlider.step = '0.1';
 
             this.voltageSlider.addEventListener(
                 'input',
@@ -709,149 +656,186 @@ class ZenerLaboratory {
         }
 
 
-        // Initial voltage
-        const initialVoltage =
-            this.voltageSlider
-                ? Number(this.voltageSlider.value)
-                : 0;
+        /* Series resistance slider */
 
-        this.updateVoltageLabel(initialVoltage);
+        if (this.seriesResistance) {
 
-        this.runSimulation(initialVoltage);
+            this.seriesResistance.addEventListener(
+                'input',
+                () => {
+
+                    const resistance =
+                        Number(this.seriesResistance.value);
+
+                    this.simulation.updateParameters({
+                        seriesResistance: resistance
+                    });
+
+                    this.updateResistanceLabel(resistance);
+
+                    this.runSimulation();
+                }
+            );
+
+            this.updateResistanceLabel(
+                Number(this.seriesResistance.value)
+            );
+        }
 
 
-        // Button actions
+        /* Load resistance slider */
+
+        if (this.loadResistance) {
+
+            this.loadResistance.addEventListener(
+                'input',
+                () => {
+
+                    const resistance =
+                        Number(this.loadResistance.value);
+
+                    this.simulation.updateParameters({
+                        loadResistance: resistance
+                    });
+
+                    this.updateLoadResistanceLabel(resistance);
+
+                    this.runSimulation();
+                }
+            );
+
+            this.updateLoadResistanceLabel(
+                Number(this.loadResistance.value)
+            );
+        }
+
+
+        /* Buttons */
+
         this.bindButton(
-            ['#runBtn', '#startSimulation', '[data-action="run"]'],
+            ['#runBtn', '#startSimulation'],
             () => this.runSimulation()
         );
 
         this.bindButton(
-            ['#recordBtn', '#recordReading', '[data-action="record"]'],
+            ['#recordBtn', '#recordReading'],
             () => this.recordObservation()
         );
 
         this.bindButton(
-            ['#resetBtn', '#resetSimulation', '[data-action="reset"]'],
+            ['#resetBtn', '#resetSimulation'],
             () => this.resetExperiment()
         );
 
         this.bindButton(
-            ['#rotateBtn', '[data-action="rotate"]'],
+            ['#rotateBtn'],
             () => this.rotateCamera()
         );
 
         this.bindButton(
-            ['#zoomInBtn', '[data-action="zoom-in"]'],
+            ['#zoomInBtn'],
             () => this.zoomCamera(0.85)
         );
 
         this.bindButton(
-            ['#zoomOutBtn', '[data-action="zoom-out"]'],
+            ['#zoomOutBtn'],
             () => this.zoomCamera(1.15)
         );
 
         this.bindButton(
-            ['#showHolesBtn', '[data-action="show-holes"]'],
+            ['#showHolesBtn'],
             () => this.toggleHoleMarkers()
         );
 
         this.bindButton(
-            ['#generateGraphBtn', '[data-action="graph"]'],
+            ['#generateGraphBtn'],
             () => this.generateGraph()
         );
 
 
-        // Resistance controls
-        const resistanceInput = this.findElement(
-            '#seriesResistance',
-            '#resistanceSlider'
+        this.updateVoltageLabel(
+            this.voltageSlider
+                ? Number(this.voltageSlider.value)
+                : 0
         );
-
-        if (resistanceInput) {
-
-            resistanceInput.addEventListener(
-                'input',
-                () => {
-
-                    this.simulation.updateParameters({
-                        seriesResistance:
-                            Number(resistanceInput.value)
-                    });
-
-                    this.runSimulation();
-                }
-            );
-        }
-
-
-        const loadInput = this.findElement(
-            '#loadResistance',
-            '#loadSlider'
-        );
-
-        if (loadInput) {
-
-            loadInput.addEventListener(
-                'input',
-                () => {
-
-                    this.simulation.updateParameters({
-                        loadResistance:
-                            Number(loadInput.value)
-                    });
-
-                    this.runSimulation();
-                }
-            );
-        }
     }
 
 
-    /* =====================================
-       16. BIND BUTTON
-    ===================================== */
+    /* =================================================
+       16. BUTTON HELPER
+    ================================================= */
 
     bindButton(selectors, callback) {
 
-        const button = this.findElement(
-            ...selectors
-        );
+        const button = this.findElement(...selectors);
 
         if (!button) {
             return;
         }
 
-        button.addEventListener(
-            'click',
-            event => {
+        button.addEventListener('click', event => {
 
-                event.preventDefault();
+            event.preventDefault();
 
-                callback();
-            }
-        );
+            callback();
+        });
     }
 
 
-    /* =====================================
-       17. UPDATE VOLTAGE LABEL
-    ===================================== */
+    /* =================================================
+       17. LABEL UPDATES
+    ================================================= */
 
     updateVoltageLabel(voltage) {
 
-        if (!this.voltageValue) {
-            return;
-        }
+        if (this.voltageValue) {
 
-        this.voltageValue.textContent =
-            `${Number(voltage).toFixed(1)} V`;
+            this.voltageValue.textContent =
+                `${Number(voltage).toFixed(1)} V`;
+        }
     }
 
 
-    /* =====================================
-       18. RUN SIMULATION
-    ===================================== */
+    updateResistanceLabel(value) {
+
+        if (!this.resistanceDisplay) {
+            return;
+        }
+
+        this.resistanceDisplay.textContent =
+            `${Number(value).toLocaleString()} Ω`;
+    }
+
+
+    updateLoadResistanceLabel(value) {
+
+        if (!this.loadResistanceDisplay) {
+            return;
+        }
+
+        this.loadResistanceDisplay.textContent =
+            `${Number(value).toLocaleString()} Ω`;
+    }
+
+
+    /* =================================================
+       18. GET SUPPLY VOLTAGE
+    ================================================= */
+
+    getSupplyVoltage() {
+
+        if (this.voltageSlider) {
+
+            return Number(this.voltageSlider.value);
+        }
+
+        return 0;
+    }
+
+
+    /* =================================================
+       19. RUN SIMULATION
+    ================================================= */
 
     runSimulation(voltage) {
 
@@ -859,38 +843,51 @@ class ZenerLaboratory {
             return null;
         }
 
-        let inputVoltage;
-
-        if (voltage !== undefined) {
-            inputVoltage = Number(voltage);
-        }
-
-        else if (this.voltageSlider) {
-            inputVoltage =
-                Number(this.voltageSlider.value);
-        }
-
-        else {
-            inputVoltage =
-                this.simulation.supplyVoltage;
-        }
+        const inputVoltage =
+            voltage === undefined
+                ? this.getSupplyVoltage()
+                : Number(voltage);
 
         const result =
             this.simulation.run(inputVoltage);
 
-        this.updateMeters(result);
-
-        this.updateComponentDisplays(result);
+        if (!result) {
+            return null;
+        }
 
         this.lastResult = result;
+
+        this.updateMeters(result);
+
+        this.update3DMeters(result);
 
         return result;
     }
 
 
-    /* =====================================
-       19. UPDATE METER READINGS
-    ===================================== */
+    /* =================================================
+       20. RESULT HELPERS
+    ================================================= */
+
+    getNumber(result, keys, fallback = 0) {
+
+        for (const key of keys) {
+
+            if (
+                result[key] !== undefined &&
+                Number.isFinite(Number(result[key]))
+            ) {
+                return Number(result[key]);
+            }
+        }
+
+        return fallback;
+    }
+
+
+    /* =================================================
+       21. UPDATE METERS
+    ================================================= */
 
     updateMeters(result) {
 
@@ -898,30 +895,53 @@ class ZenerLaboratory {
             return;
         }
 
-        const current =
-            result.currentMilliampere ??
-            result.loadCurrentMilliampere ??
-            0;
+        let current;
+        let voltage;
+        let power;
 
-        const voltage =
-            result.diodeVoltage ??
-            result.outputVoltage ??
-            0;
+        if (this.mode === 'load-regulation') {
 
-        const power =
-            result.powerMilliwatt ??
-            result.zenerPowerMilliwatt ??
-            0;
+            current = this.getNumber(result, [
+                'loadCurrentMilliampere',
+                'currentMilliampere'
+            ]);
 
-        if (this.ammeterDisplay) {
+            voltage = this.getNumber(result, [
+                'outputVoltage',
+                'diodeVoltage'
+            ]);
 
-            this.ammeterDisplay.textContent =
+            power = this.getNumber(result, [
+                'zenerPowerMilliwatt',
+                'powerMilliwatt'
+            ]);
+        }
+
+        else {
+
+            current = this.getNumber(result, [
+                'currentMilliampere'
+            ]);
+
+            voltage = this.getNumber(result, [
+                'diodeVoltage'
+            ]);
+
+            power = this.getNumber(result, [
+                'powerMilliwatt'
+            ]);
+        }
+
+
+        if (this.currentDisplay) {
+
+            this.currentDisplay.textContent =
                 `${current.toFixed(3)} mA`;
         }
 
-        if (this.voltmeterDisplay) {
+        if (this.voltageDisplay) {
 
-            this.voltmeterDisplay.textContent =
+            this.voltageDisplay.textContent =
                 `${voltage.toFixed(3)} V`;
         }
 
@@ -934,30 +954,30 @@ class ZenerLaboratory {
         if (this.regionDisplay) {
 
             this.regionDisplay.textContent =
-                result.region;
+                result.region || 'Operating';
         }
     }
 
 
-    /* =====================================
-       20. UPDATE 3D METER DISPLAYS
-    ===================================== */
+    /* =================================================
+       22. UPDATE 3D METERS
+    ================================================= */
 
-    updateComponentDisplays(result) {
+    update3DMeters(result) {
 
         if (!result) {
             return;
         }
 
-        const current =
-            result.currentMilliampere ??
-            result.loadCurrentMilliampere ??
-            0;
+        const current = this.getNumber(result, [
+            'currentMilliampere',
+            'loadCurrentMilliampere'
+        ]);
 
-        const voltage =
-            result.diodeVoltage ??
-            result.outputVoltage ??
-            0;
+        const voltage = this.getNumber(result, [
+            'diodeVoltage',
+            'outputVoltage'
+        ]);
 
         this.update3DLabel(
             this.components.ammeter,
@@ -992,17 +1012,11 @@ class ZenerLaboratory {
             document.createElement('canvas');
 
         canvas.width = 512;
-
         canvas.height = 128;
 
         const ctx = canvas.getContext('2d');
 
-        ctx.clearRect(
-            0,
-            0,
-            canvas.width,
-            canvas.height
-        );
+        ctx.clearRect(0, 0, 512, 128);
 
         ctx.fillStyle = '#7dffdc';
 
@@ -1012,14 +1026,14 @@ class ZenerLaboratory {
 
         ctx.textBaseline = 'middle';
 
-        ctx.fillText(
-            value,
-            256,
-            64
-        );
+        ctx.fillText(value, 256, 64);
 
         const texture =
             new THREE.CanvasTexture(canvas);
+
+        if (label.material.map) {
+            label.material.map.dispose();
+        }
 
         label.material.map = texture;
 
@@ -1027,9 +1041,9 @@ class ZenerLaboratory {
     }
 
 
-    /* =====================================
-       21. RECORD OBSERVATION
-    ===================================== */
+    /* =================================================
+       23. RECORD OBSERVATION
+    ================================================= */
 
     recordObservation() {
 
@@ -1041,6 +1055,10 @@ class ZenerLaboratory {
             this.simulation.recordObservation();
 
         if (!observation) {
+            this.showMessage(
+                'No reading available to record.'
+            );
+
             return;
         }
 
@@ -1049,116 +1067,128 @@ class ZenerLaboratory {
         this.updateObservationTable();
 
         this.showMessage(
-            'Observation recorded successfully.'
+            'Observation recorded.'
         );
     }
 
 
-    /* =====================================
-       22. UPDATE OBSERVATION TABLE
-    ===================================== */
+    /* =================================================
+       24. UPDATE OBSERVATION TABLE
+    ================================================= */
 
     updateObservationTable() {
 
         const tableBody = this.findElement(
             '#observationBody',
             '#observationTable tbody',
-            '#observationTableBody',
-            '[data-observations]'
+            '#observationTableBody'
         );
 
         if (!tableBody) {
             return;
         }
 
-        tableBody.innerHTML = '';
+        tableBody.replaceChildren();
 
-        this.observations.forEach(
-            (item, index) => {
+        this.observations.forEach((item, index) => {
 
-                const voltage =
-                    item.diodeVoltage ??
-                    item.outputVoltage ??
-                    0;
+            const voltage = this.getNumber(item, [
+                'outputVoltage',
+                'diodeVoltage'
+            ]);
 
-                const current =
-                    item.currentMilliampere ??
-                    item.loadCurrentMilliampere ??
-                    0;
+            const current = this.getNumber(item, [
+                'loadCurrentMilliampere',
+                'currentMilliampere'
+            ]);
 
-                const row =
-                    document.createElement('tr');
+            const region =
+                item.region || 'Operating';
 
-                const values = [
-                    index + 1,
-                    voltage.toFixed(3),
-                    current.toFixed(3),
-                    item.region
-                ];
+            const values = [
+                index + 1,
+                voltage.toFixed(3),
+                current.toFixed(3),
+                region
+            ];
 
-                values.forEach(value => {
+            const row =
+                document.createElement('tr');
 
-                    const cell =
-                        document.createElement('td');
+            values.forEach(value => {
 
-                    cell.textContent = value;
+                const cell =
+                    document.createElement('td');
 
-                    row.appendChild(cell);
-                });
+                cell.textContent = String(value);
 
-                tableBody.appendChild(row);
-            }
-        );
+                row.appendChild(cell);
+            });
+
+            tableBody.appendChild(row);
+        });
     }
 
 
-    /* =====================================
-       23. GENERATE GRAPH
-    ===================================== */
+    /* =================================================
+       25. GENERATE GRAPH
+    ================================================= */
 
     generateGraph() {
 
-        if (!this.graph) {
+        if (!this.graph || !this.simulation) {
             return;
         }
 
-        if (this.mode === 'load-regulation') {
+        try {
 
-            const data =
-                this.simulation.generateLoadData();
+            if (this.mode === 'load-regulation') {
 
-            this.graph
-                .setGraphType('load')
-                .setData(data);
+                const data =
+                    this.simulation.generateLoadData();
+
+                this.graph
+                    .setGraphType('load')
+                    .setData(data);
+            }
+
+            else {
+
+                const data =
+                    this.simulation.generateVIData(
+                        0,
+                        12,
+                        60
+                    );
+
+                this.graph
+                    .setGraphType('vi')
+                    .setData(data);
+            }
+
+        } catch (error) {
+
+            console.error(
+                'Graph generation error:',
+                error
+            );
+
+            this.showMessage(
+                'Unable to generate graph.'
+            );
         }
-
-        else {
-
-            const data =
-                this.simulation.generateVIData(
-                    0,
-                    12,
-                    60
-                );
-
-            this.graph
-                .setGraphType('vi')
-                .setData(data);
-        }
-
-        this.showMessage(
-            'Graph generated successfully.'
-        );
     }
 
 
-    /* =====================================
-       24. RESET EXPERIMENT
-    ===================================== */
+    /* =================================================
+       26. RESET EXPERIMENT
+    ================================================= */
 
     resetExperiment() {
 
         this.observations = [];
+
+        this.lastResult = null;
 
         this.simulation.reset();
 
@@ -1166,7 +1196,24 @@ class ZenerLaboratory {
             this.voltageSlider.value = 0;
         }
 
+        if (this.seriesResistance) {
+            this.seriesResistance.value = 1000;
+        }
+
+        if (this.loadResistance) {
+            this.loadResistance.value = 1000;
+        }
+
         this.updateVoltageLabel(0);
+
+        this.updateResistanceLabel(1000);
+
+        this.updateLoadResistanceLabel(1000);
+
+        this.simulation.updateParameters({
+            seriesResistance: 1000,
+            loadResistance: 1000
+        });
 
         this.runSimulation(0);
 
@@ -1177,51 +1224,60 @@ class ZenerLaboratory {
         this.updateObservationTable();
 
         this.showMessage(
-            'Experiment has been reset.'
+            'Experiment reset successfully.'
         );
     }
 
 
-    /* =====================================
-       25. CHANGE EXPERIMENT HEADING
-    ===================================== */
+    /* =================================================
+       27. UPDATE HEADING
+    ================================================= */
 
     updateExperimentHeading() {
 
         const heading =
             document.getElementById('experimentTitle');
 
-        if (!heading) {
-            return;
+        if (heading) {
+            heading.textContent =
+                this.getExperimentTitle();
         }
-
-        const titles = {
-
-            forward:
-                'Forward Bias Characteristics',
-
-            reverse:
-                'Reverse Bias Characteristics',
-
-            'load-regulation':
-                'Zener Diode Load Regulation'
-        };
-
-        heading.textContent =
-            titles[this.mode] ||
-            titles.forward;
     }
 
 
-    /* =====================================
-       26. CAMERA ROTATION
-    ===================================== */
+    /* =================================================
+       28. CAMERA CONTROLS
+    ================================================= */
+
+    setupCameraControls() {
+
+        this.controls = new OrbitControls(
+            this.camera,
+            this.renderer.domElement
+        );
+
+        this.controls.enableDamping = true;
+
+        this.controls.dampingFactor = 0.06;
+
+        this.controls.enablePan = true;
+
+        this.controls.enableZoom = true;
+
+        this.controls.minDistance = 5;
+
+        this.controls.maxDistance = 30;
+
+        this.controls.maxPolarAngle =
+            Math.PI * 0.48;
+
+        this.controls.target.set(0, 0, 0);
+
+        this.controls.update();
+    }
+
 
     rotateCamera() {
-
-        if (!this.controls) {
-            return;
-        }
 
         const current =
             this.camera.position.clone();
@@ -1246,15 +1302,7 @@ class ZenerLaboratory {
     }
 
 
-    /* =====================================
-       27. CAMERA ZOOM
-    ===================================== */
-
     zoomCamera(factor) {
-
-        if (!this.camera) {
-            return;
-        }
 
         const direction =
             this.camera.position.clone()
@@ -1263,16 +1311,13 @@ class ZenerLaboratory {
         direction.multiplyScalar(factor);
 
         this.camera.position.copy(
-            this.controls.target.clone().add(direction)
+            this.controls.target.clone()
+                .add(direction)
         );
 
         this.controls.update();
     }
 
-
-    /* =====================================
-       28. TOGGLE BREADBOARD HOLES
-    ===================================== */
 
     toggleHoleMarkers() {
 
@@ -1285,9 +1330,9 @@ class ZenerLaboratory {
     }
 
 
-    /* =====================================
-       29. SETUP 3D INTERACTIONS
-    ===================================== */
+    /* =================================================
+       29. COMPONENT SELECTION
+    ================================================= */
 
     setupInteractions() {
 
@@ -1296,7 +1341,8 @@ class ZenerLaboratory {
             event => {
 
                 const rect =
-                    this.renderer.domElement.getBoundingClientRect();
+                    this.renderer.domElement
+                        .getBoundingClientRect();
 
                 this.pointer.x =
                     ((event.clientX - rect.left) /
@@ -1311,44 +1357,39 @@ class ZenerLaboratory {
                     this.camera
                 );
 
-                const objects = [
-                    ...Object.values(this.components)
-                ];
+                const objects =
+                    Object.values(this.components);
 
-                const intersections =
+                const hits =
                     this.raycaster.intersectObjects(
                         objects,
                         true
                     );
 
-                if (!intersections.length) {
-                    this.selectedObject = null;
+                if (!hits.length) {
                     return;
                 }
 
-                let selected =
-                    intersections[0].object;
+                let selected = hits[0].object;
 
                 while (
                     selected.parent &&
-                    !selected.userData.type
+                    selected.parent !== this.scene &&
+                    !selected.userData.type &&
+                    !selected.userData.name
                 ) {
                     selected = selected.parent;
                 }
 
-                this.selectedObject = selected;
-
-                this.showComponentInformation(
-                    selected
-                );
+                this.showComponentInformation(selected);
             }
         );
     }
 
 
-    /* =====================================
+    /* =================================================
        30. COMPONENT INFORMATION
-    ===================================== */
+    ================================================= */
 
     showComponentInformation(object) {
 
@@ -1361,93 +1402,38 @@ class ZenerLaboratory {
 
         const data = object.userData || {};
 
-        const name =
+        const title =
             data.name ||
             data.type ||
             'Electronic Component';
 
         const description =
             data.description ||
-            'Laboratory component';
+            'Select and inspect this laboratory component.';
 
-        info.innerHTML = '';
+        info.replaceChildren();
 
-        const title =
+        const heading =
             document.createElement('strong');
 
-        title.textContent = name;
+        heading.textContent = title;
 
-        const text =
+        const paragraph =
             document.createElement('p');
 
-        text.textContent = description;
+        paragraph.textContent = description;
 
-        info.append(
-            title,
-            text
-        );
+        info.append(heading, paragraph);
 
         info.classList.add('active');
     }
 
 
-    /* =====================================
-       31. CAMERA CONTROLS
-    ===================================== */
-
-    createCameraControls() {
-
-        this.controls = new OrbitControls(
-            this.camera,
-            this.renderer.domElement
-        );
-
-        this.controls.enableDamping = true;
-
-        this.controls.dampingFactor = 0.06;
-
-        this.controls.enablePan = true;
-
-        this.controls.enableZoom = true;
-
-        this.controls.minDistance = 5;
-
-        this.controls.maxDistance = 30;
-
-        this.controls.maxPolarAngle =
-            Math.PI * 0.48;
-
-        this.controls.target.set(
-            0,
-            0,
-            0
-        );
-
-        this.controls.update();
-    }
-
-
-    /* =====================================
-       32. SETUP CAMERA CONTROLS
-    ===================================== */
-
-    setupCameraControls() {
-
-        if (this.controls) {
-            return;
-        }
-
-        this.createCameraControls();
-    }
-
-
-    /* =====================================
-       33. RESIZE HANDLER
-    ===================================== */
+    /* =================================================
+       31. RESIZE
+    ================================================= */
 
     setupResize() {
-
-        this.setupCameraControls();
 
         const resize = () => {
 
@@ -1472,17 +1458,11 @@ class ZenerLaboratory {
             );
 
             this.renderer.setPixelRatio(
-                Math.min(
-                    window.devicePixelRatio || 1,
-                    2
-                )
+                Math.min(window.devicePixelRatio || 1, 2)
             );
         };
 
-        window.addEventListener(
-            'resize',
-            resize
-        );
+        window.addEventListener('resize', resize);
 
         if (window.ResizeObserver) {
 
@@ -1498,9 +1478,9 @@ class ZenerLaboratory {
     }
 
 
-    /* =====================================
-       34. ANIMATION LOOP
-    ===================================== */
+    /* =================================================
+       32. ANIMATION LOOP
+    ================================================= */
 
     animate() {
 
@@ -1509,18 +1489,10 @@ class ZenerLaboratory {
                 () => this.animate()
             );
 
-        const delta =
-            this.clock.getDelta();
+        this.clock.getDelta();
 
         if (this.controls) {
             this.controls.update();
-        }
-
-        // Subtle component animation
-        if (this.components.potentiometer) {
-
-            this.components.potentiometer.rotation.y +=
-                delta * 0.08;
         }
 
         this.renderer.render(
@@ -1530,15 +1502,14 @@ class ZenerLaboratory {
     }
 
 
-    /* =====================================
-       35. LOADING SCREEN
-    ===================================== */
+    /* =================================================
+       33. LOADING SCREEN
+    ================================================= */
 
     hideLoadingScreen() {
 
         const loader =
-            document.getElementById('loadingScreen') ||
-            document.getElementById('loader');
+            document.getElementById('loadingScreen');
 
         if (!loader) {
             return;
@@ -1554,17 +1525,31 @@ class ZenerLaboratory {
     }
 
 
-    /* =====================================
-       36. MESSAGE
-    ===================================== */
+    showLoadingError() {
+
+        const loader =
+            document.getElementById('loadingScreen');
+
+        if (!loader) {
+            return;
+        }
+
+        loader.textContent =
+            'Unable to initialize the 3D laboratory. Please refresh the page.';
+    }
+
+
+    /* =================================================
+       34. TOAST MESSAGE
+    ================================================= */
 
     showMessage(message) {
 
-        const existing =
+        const previous =
             document.getElementById('labToast');
 
-        if (existing) {
-            existing.remove();
+        if (previous) {
+            previous.remove();
         }
 
         const toast =
@@ -1582,7 +1567,7 @@ class ZenerLaboratory {
             padding: 13px 18px;
             border-radius: 9px;
             background: #123b42;
-            color: #ffffff;
+            color: white;
             border: 1px solid #22d3ee;
             font-size: 13px;
             box-shadow: 0 8px 25px rgba(0,0,0,.3);
@@ -1596,21 +1581,17 @@ class ZenerLaboratory {
     }
 
 
-    /* =====================================
-       37. CLEANUP
-    ===================================== */
+    /* =================================================
+       35. CLEANUP
+    ================================================= */
 
     destroy() {
 
         if (this.animationFrame) {
-
-            cancelAnimationFrame(
-                this.animationFrame
-            );
+            cancelAnimationFrame(this.animationFrame);
         }
 
         if (this.resizeObserver) {
-
             this.resizeObserver.disconnect();
         }
 
@@ -1618,12 +1599,8 @@ class ZenerLaboratory {
             this.controls.dispose();
         }
 
-        if (this.graph) {
+        if (this.graph && this.graph.destroy) {
             this.graph.destroy();
-        }
-
-        if (this.viva) {
-            this.viva.destroy();
         }
 
         if (this.renderer) {
@@ -1633,17 +1610,35 @@ class ZenerLaboratory {
             this.renderer.domElement.remove();
         }
 
-        window.removeEventListener(
-            'resize',
-            this.resizeHandler
-        );
+        this.scene.traverse(object => {
+
+            if (object.geometry) {
+                object.geometry.dispose();
+            }
+
+            if (object.material) {
+
+                const materials = Array.isArray(object.material)
+                    ? object.material
+                    : [object.material];
+
+                materials.forEach(material => {
+
+                    if (material.map) {
+                        material.map.dispose();
+                    }
+
+                    material.dispose();
+                });
+            }
+        });
     }
 }
 
 
-/* =========================================
-   38. START LABORATORY
-========================================= */
+/* =====================================================
+   36. START APPLICATION
+===================================================== */
 
 let laboratory = null;
 
@@ -1655,17 +1650,14 @@ function startLaboratory() {
 
     try {
 
-        laboratory =
-            new ZenerLaboratory();
+        laboratory = new ZenerLaboratory();
 
         window.zenerLab = laboratory;
 
-    }
-
-    catch (error) {
+    } catch (error) {
 
         console.error(
-            'Laboratory initialization failed:',
+            'ZENER-LAB-360 startup error:',
             error
         );
 
@@ -1675,7 +1667,7 @@ function startLaboratory() {
         if (loader) {
 
             loader.textContent =
-                'Unable to load the 3D laboratory. Please refresh the page.';
+                'Laboratory initialization failed. Check the browser console.';
         }
     }
 }
@@ -1689,9 +1681,7 @@ if (document.readyState === 'loading') {
         { once: true }
     );
 
-}
-
-else {
+} else {
 
     startLaboratory();
 }
