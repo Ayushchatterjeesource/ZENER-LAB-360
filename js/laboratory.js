@@ -3,223 +3,157 @@
    ZENER-LAB-360
    FILE: js/laboratory.js
 
-   Updated Main Laboratory Controller
-   Supports:
-   1. Forward Bias
-   2. Reverse Bias
-   3. Load Regulation
+   Main Laboratory Controller
 ===================================================== */
 
 import * as THREE from 'three';
 
 import { OrbitControls } from
-    'three/addons/controls/OrbitControls.js';
+'three/addons/controls/OrbitControls.js';
 
 import {
     createBreadboard,
     createComponent
 } from './components.js';
 
-import {
-    createHoleMarkers
-} from './breadboard.js';
+import { createHoleMarkers } from './breadboard.js';
 
-import {
-    CircuitBuilder
-} from './circuit-builder.js';
+import { CircuitBuilder } from './circuit-builder.js';
 
-import {
-    ZenerSimulation
-} from './simulation.js';
+import { ZenerSimulation } from './simulation.js';
 
-import {
-    ExperimentGraph
-} from './graph.js';
+import { ExperimentGraph } from './graph.js';
 
-import {
-    VivaModule
-} from './viva.js';
+import { VivaModule } from './viva.js';
 
-
-/* =====================================================
-   1. MAIN CLASS
-===================================================== */
 
 class ZenerLaboratory {
 
     constructor() {
 
-        this.container =
-            document.getElementById('three-container');
-
-        if (!this.container) {
-            console.error('3D viewport not found.');
-            return;
-        }
-
         this.scene = null;
+
         this.camera = null;
+
         this.renderer = null;
+
         this.controls = null;
-
-        this.circuitBuilder = null;
-        this.simulation = null;
-        this.graph = null;
-        this.viva = null;
-
-        this.components = {};
-
-        this.observations = [];
-
-        this.lastResult = null;
-
-        this.mode = this.detectExperimentMode();
-
-        this.holeMarkers = null;
-
-        this.animationFrame = null;
-
-        this.resizeObserver = null;
-
-        this.raycaster = new THREE.Raycaster();
-
-        this.pointer = new THREE.Vector2();
 
         this.clock = new THREE.Clock();
 
-        this.initialize();
+        this.components = [];
+
+        this.selectedComponent = null;
+
+        this.simulation = null;
+
+        this.graph = null;
+
+        this.viva = null;
+
+        this.mode = this.detectMode();
+
+        this.inputVoltage = 0;
+
+        this.isRunning = false;
+
+        this.init();
     }
 
 
-    /* =================================================
-       2. EXPERIMENT MODE
-    ================================================= */
+    /* ================================================
+       DETECT EXPERIMENT
+    ================================================ */
 
-    detectExperimentMode() {
+    detectMode() {
 
         const path =
             window.location.pathname.toLowerCase();
 
-        if (path.includes('reverse')) {
-            return 'reverse';
+        if (path.includes('load-regulation')) {
+            return 'load-regulation';
         }
 
-        if (
-            path.includes('load-regulation') ||
-            path.includes('load_regulation')
-        ) {
-            return 'load-regulation';
+        if (path.includes('reverse')) {
+            return 'reverse';
         }
 
         return 'forward';
     }
 
 
-    getExperimentTitle() {
+    /* ================================================
+       INITIALIZE
+    ================================================ */
 
-        const titles = {
-            forward: 'Forward Bias Characteristics',
-            reverse: 'Reverse Bias Characteristics',
-            'load-regulation': 'Zener Diode Load Regulation'
-        };
+    init() {
 
-        return titles[this.mode] || titles.forward;
+        this.createScene();
+
+        this.createCamera();
+
+        this.createRenderer();
+
+        this.createLighting();
+
+        this.createLaboratory();
+
+        this.createControls();
+
+        this.createSimulation();
+
+        this.createGraph();
+
+        this.createViva();
+
+        this.bindUI();
+
+        this.animate();
+
+        this.updateMeters(
+            this.simulation.run(0)
+        );
+
+        console.log(
+            'ZENER-LAB-360 initialized:',
+            this.mode
+        );
     }
 
 
-    /* =================================================
-       3. INITIALIZATION
-    ================================================= */
-
-    initialize() {
-
-        try {
-
-            this.createScene();
-
-            this.createCamera();
-
-            this.createRenderer();
-
-            this.createLights();
-
-            this.createEnvironment();
-
-            this.createLaboratoryComponents();
-
-            this.createCircuitBuilder();
-
-            this.createSimulation();
-
-            this.createGraph();
-
-            this.createViva();
-
-            this.setupCameraControls();
-
-            this.setupControls();
-
-            this.setupInteractions();
-
-            this.setupResize();
-
-            this.updateExperimentHeading();
-
-            this.runSimulation(0);
-
-            this.generateGraph();
-
-            this.hideLoadingScreen();
-
-            this.animate();
-
-            console.log(
-                'ZENER-LAB-360 ready:',
-                this.mode
-            );
-
-        } catch (error) {
-
-            console.error(
-                'Laboratory initialization error:',
-                error
-            );
-
-            this.showLoadingError();
-        }
-    }
-
-
-    /* =================================================
-       4. THREE.JS SCENE
-    ================================================= */
+    /* ================================================
+       THREE.JS SCENE
+    ================================================ */
 
     createScene() {
 
         this.scene = new THREE.Scene();
 
         this.scene.background =
-            new THREE.Color(0x101a2a);
+            new THREE.Color('#101827');
 
         this.scene.fog = new THREE.Fog(
-            0x101a2a,
-            25,
-            60
+            '#101827',
+            12,
+            35
         );
     }
 
 
-    /* =================================================
-       5. CAMERA
-    ================================================= */
+    /* ================================================
+       CAMERA
+    ================================================ */
 
     createCamera() {
 
+        const container =
+            document.getElementById('three-container');
+
         const width =
-            this.container.clientWidth || 800;
+            container?.clientWidth || 800;
 
         const height =
-            this.container.clientHeight || 500;
+            container?.clientHeight || 500;
 
         this.camera = new THREE.PerspectiveCamera(
             45,
@@ -229,33 +163,43 @@ class ZenerLaboratory {
         );
 
         this.camera.position.set(
-            10,
-            9,
-            12
+            0,
+            7,
+            11
         );
-
-        this.camera.lookAt(0, 0, 0);
     }
 
 
-    /* =================================================
-       6. RENDERER
-    ================================================= */
+    /* ================================================
+       RENDERER
+    ================================================ */
 
     createRenderer() {
 
+        const container =
+            document.getElementById('three-container');
+
+        if (!container) {
+            throw new Error(
+                'Three.js container not found.'
+            );
+        }
+
         this.renderer = new THREE.WebGLRenderer({
+
             antialias: true,
-            alpha: false
+
+            alpha: true
+
         });
 
         this.renderer.setPixelRatio(
-            Math.min(window.devicePixelRatio || 1, 2)
+            Math.min(window.devicePixelRatio, 2)
         );
 
         this.renderer.setSize(
-            this.container.clientWidth || 800,
-            this.container.clientHeight || 500
+            container.clientWidth,
+            container.clientHeight
         );
 
         this.renderer.shadowMap.enabled = true;
@@ -266,85 +210,98 @@ class ZenerLaboratory {
         this.renderer.outputColorSpace =
             THREE.SRGBColorSpace;
 
-        this.renderer.toneMapping =
-            THREE.ACESFilmicToneMapping;
+        container.innerHTML = '';
 
-        this.renderer.toneMappingExposure = 1.15;
-
-        this.container.appendChild(
+        container.appendChild(
             this.renderer.domElement
         );
 
-        this.renderer.domElement.style.width = '100%';
+        this.controls = new OrbitControls(
+            this.camera,
+            this.renderer.domElement
+        );
 
-        this.renderer.domElement.style.height = '100%';
+        this.controls.enableDamping = true;
 
-        this.renderer.domElement.style.display = 'block';
+        this.controls.dampingFactor = 0.06;
+
+        this.controls.target.set(
+            0,
+            0,
+            0
+        );
+
+        this.controls.minDistance = 4;
+
+        this.controls.maxDistance = 20;
+
+        this.controls.maxPolarAngle =
+            Math.PI / 2.05;
     }
 
 
-    /* =================================================
-       7. LIGHTING
-    ================================================= */
+    /* ================================================
+       LIGHTING
+    ================================================ */
 
-    createLights() {
+    createLighting() {
 
         const ambient = new THREE.AmbientLight(
-            0xffffff,
+            '#ffffff',
             1.5
         );
 
         this.scene.add(ambient);
 
-
         const mainLight = new THREE.DirectionalLight(
-            0xffffff,
-            2.5
+            '#ffffff',
+            2
         );
 
-        mainLight.position.set(8, 15, 10);
+        mainLight.position.set(
+            5,
+            10,
+            7
+        );
 
         mainLight.castShadow = true;
 
-        mainLight.shadow.mapSize.set(2048, 2048);
-
         this.scene.add(mainLight);
 
-
         const fillLight = new THREE.PointLight(
-            0x27d9cf,
-            35,
-            30
+            '#22d3ee',
+            1.2,
+            20
         );
 
-        fillLight.position.set(-8, 6, -5);
+        fillLight.position.set(
+            -5,
+            4,
+            -3
+        );
 
         this.scene.add(fillLight);
-
-
-        const backLight = new THREE.DirectionalLight(
-            0x568bff,
-            1.1
-        );
-
-        backLight.position.set(-5, 8, 8);
-
-        this.scene.add(backLight);
     }
 
 
-    /* =================================================
-       8. LAB TABLE
-    ================================================= */
+    /* ================================================
+       LABORATORY TABLE
+    ================================================ */
 
-    createEnvironment() {
+    createLaboratory() {
 
         const floor = new THREE.Mesh(
-            new THREE.PlaneGeometry(60, 60),
+
+            new THREE.PlaneGeometry(30, 30),
+
             new THREE.MeshStandardMaterial({
-                color: 0x172438,
+
+                color: '#202d3e',
+
                 roughness: 0.85
+
             })
+
         );
 
         floor.rotation.x = -Math.PI / 2;
@@ -357,14 +314,24 @@ class ZenerLaboratory {
 
 
         const table = new THREE.Mesh(
-            new THREE.BoxGeometry(17, 0.45, 12),
+
+            new THREE.BoxGeometry(
+                12,
+                0.35,
+                7
+            ),
+
             new THREE.MeshStandardMaterial({
-                color: 0x28384b,
+
+                color: '#34465b',
+
                 roughness: 0.55
+
             })
+
         );
 
-        table.position.set(0, -0.35, 0);
+        table.position.y = -0.2;
 
         table.receiveShadow = true;
 
@@ -373,125 +340,135 @@ class ZenerLaboratory {
         this.scene.add(table);
 
 
-        const grid = new THREE.GridHelper(
-            50,
-            50,
-            0x34506b,
-            0x26394f
-        );
-
-        grid.position.y = -0.11;
-
-        grid.material.transparent = true;
-
-        grid.material.opacity = 0.18;
-
-        this.scene.add(grid);
-    }
-
-
-    /* =================================================
-       9. COMPONENTS
-    ================================================= */
-
-    createLaboratoryComponents() {
-
         const breadboard = createBreadboard();
 
-        breadboard.position.set(0, 0, 0);
+        breadboard.position.set(
+            0,
+            0.02,
+            0
+        );
+
+        breadboard.scale.setScalar(1);
 
         this.scene.add(breadboard);
 
-        this.components.breadboard = breadboard;
-
-
-        const diode = createComponent('zener');
-
-        diode.position.set(-1.1, 0.35, 0);
-
-        this.scene.add(diode);
-
-        this.components.zener = diode;
-
-
-        const resistor = createComponent('resistor');
-
-        resistor.position.set(1.1, 0.35, 0);
-
-        this.scene.add(resistor);
-
-        this.components.resistor = resistor;
-
-
-        const potentiometer =
-            createComponent('potentiometer');
-
-        potentiometer.position.set(3, 0.35, 1.5);
-
-        this.scene.add(potentiometer);
-
-        this.components.potentiometer =
-            potentiometer;
-
-
-        const supply = createComponent('dcSupply');
-
-        supply.position.set(-7, 0, -1);
-
-        this.scene.add(supply);
-
-        this.components.dcSupply = supply;
-
-
-        const ammeter = createComponent('ammeter');
-
-        ammeter.position.set(-5.5, 0, 3);
-
-        this.scene.add(ammeter);
-
-        this.components.ammeter = ammeter;
-
-
-        const voltmeter = createComponent('voltmeter');
-
-        voltmeter.position.set(5.5, 0, 3);
-
-        this.scene.add(voltmeter);
-
-        this.components.voltmeter = voltmeter;
+        this.breadboard = breadboard;
 
 
         try {
 
-            this.holeMarkers = createHoleMarkers(
-                this.scene,
-                { visible: false }
-            );
+            this.holeMarkers =
+                createHoleMarkers(this.scene, {
+                    visible: false
+                });
 
         } catch (error) {
 
             console.warn(
-                'Breadboard markers unavailable:',
+                'Breadboard markers could not be initialized:',
                 error
             );
+
+        }
+
+
+        this.createLabComponents();
+    }
+
+
+    /* ================================================
+       COMPONENTS
+    ================================================ */
+
+    createLabComponents() {
+
+        const layout = [
+
+            {
+                type: 'dc-supply',
+                position: [-4, 0.25, -1.5]
+            },
+
+            {
+                type: 'ammeter',
+                position: [-2.5, 0.25, -1.5]
+            },
+
+            {
+                type: 'voltmeter',
+                position: [2.8, 0.25, -1.5]
+            },
+
+            {
+                type: 'resistor',
+                position: [-2, 0.25, 1.5]
+            },
+
+            {
+                type: 'zener-diode',
+                position: [0, 0.25, 1.5]
+            },
+
+            {
+                type: 'potentiometer',
+                position: [2, 0.25, 1.5]
+            }
+
+        ];
+
+
+        for (const item of layout) {
+
+            try {
+
+                const component =
+                    createComponent(item.type);
+
+                if (!component) {
+                    continue;
+                }
+
+                component.position.set(
+                    ...item.position
+                );
+
+                component.userData.componentType =
+                    item.type;
+
+                component.userData.selectable = true;
+
+                component.traverse(child => {
+
+                    if (child.isMesh) {
+
+                        child.castShadow = true;
+
+                        child.receiveShadow = true;
+
+                    }
+
+                });
+
+                this.scene.add(component);
+
+                this.components.push(component);
+
+            } catch (error) {
+
+                console.warn(
+                    'Component creation failed:',
+                    item.type,
+                    error
+                );
+
+            }
         }
     }
 
 
-    /* =================================================
-       10. CIRCUIT BUILDER
-    ================================================= */
-
-    createCircuitBuilder() {
-
-        this.circuitBuilder =
-            new CircuitBuilder(this.scene);
-    }
-
-
-    /* =================================================
-       11. SIMULATION ENGINE
-    ================================================= */
+    /* ================================================
+       SIMULATION
+    ================================================ */
 
     createSimulation() {
 
@@ -515,9 +492,9 @@ class ZenerLaboratory {
     }
 
 
-    /* =================================================
-       12. GRAPH
-    ================================================= */
+    /* ================================================
+       GRAPH
+    ================================================ */
 
     createGraph() {
 
@@ -525,23 +502,57 @@ class ZenerLaboratory {
             document.getElementById('viGraph');
 
         if (!canvas) {
-            console.warn('Graph canvas not found.');
             return;
         }
 
-        this.graph = new ExperimentGraph(canvas);
+        this.graph =
+            new ExperimentGraph(canvas);
 
         this.graph.setGraphType(
             this.mode === 'load-regulation'
                 ? 'load'
                 : 'vi'
         );
+
+        this.generateGraph();
     }
 
 
-    /* =================================================
-       13. VIVA MODULE
-    ================================================= */
+    generateGraph() {
+
+        if (!this.graph) {
+            return;
+        }
+
+        if (this.mode === 'load-regulation') {
+
+            const data =
+                this.simulation.generateLoadData();
+
+            this.graph
+                .setGraphType('load')
+                .setData(data);
+
+        } else {
+
+            const data =
+                this.simulation.generateVIData(
+                    0,
+                    12,
+                    60
+                );
+
+            this.graph
+                .setGraphType('vi')
+                .setData(data);
+
+        }
+    }
+
+
+    /* ================================================
+       VIVA
+    ================================================ */
 
     createViva() {
 
@@ -552,342 +563,147 @@ class ZenerLaboratory {
             return;
         }
 
-        this.viva = new VivaModule(container);
+        this.viva =
+            new VivaModule(container);
     }
 
 
-    /* =================================================
-       14. DOM SELECTOR HELPER
-    ================================================= */
+    /* ================================================
+       UI EVENT LISTENERS
+    ================================================ */
 
-    findElement(...selectors) {
+    bindUI() {
 
-        for (const selector of selectors) {
+        const voltageSlider =
+            document.getElementById('voltageSlider');
 
-            const element =
-                document.querySelector(selector);
+        const voltageValue =
+            document.getElementById('voltageValue');
 
-            if (element) {
-                return element;
-            }
-        }
+        const runButton =
+            document.getElementById('runBtn');
 
-        return null;
-    }
+        const resetButton =
+            document.getElementById('resetBtn');
 
+        const recordButton =
+            document.getElementById('recordBtn');
 
-    /* =================================================
-       15. SETUP CONTROLS
-    ================================================= */
-
-    setupControls() {
-
-        this.voltageSlider = this.findElement(
-            '#voltageSlider',
-            '#supplyVoltage',
-            '#voltageRange'
-        );
-
-        this.voltageValue = this.findElement(
-            '#voltageValue',
-            '#voltageDisplay',
-            '[data-voltage-value]'
-        );
-
-        this.currentDisplay = this.findElement(
-            '#currentReading',
-            '#ammeterValue',
-            '[data-meter="current"]'
-        );
-
-        this.voltageDisplay = this.findElement(
-            '#voltageReading',
-            '#voltmeterValue',
-            '[data-meter="voltage"]'
-        );
-
-        this.powerDisplay = this.findElement(
-            '#powerReading',
-            '#powerValue',
-            '[data-meter="power"]'
-        );
-
-        this.regionDisplay = this.findElement(
-            '#operatingRegion',
-            '#regionValue',
-            '[data-operating-region]'
-        );
-
-        this.seriesResistance = this.findElement(
-            '#seriesResistance',
-            '#resistanceSlider'
-        );
-
-        this.loadResistance = this.findElement(
-            '#loadResistance',
-            '#loadSlider'
-        );
-
-        this.resistanceDisplay = this.findElement(
-            '#resistanceDisplay'
-        );
-
-        this.loadResistanceDisplay = this.findElement(
-            '#loadResistanceDisplay'
-        );
+        const loadResistance =
+            document.getElementById('loadResistance');
 
 
-        /* Voltage slider */
+        if (voltageSlider) {
 
-        if (this.voltageSlider) {
+            this.inputVoltage =
+                Number(voltageSlider.value);
 
-            this.voltageSlider.addEventListener(
+            voltageSlider.addEventListener(
                 'input',
                 () => {
 
-                    const voltage =
-                        Number(this.voltageSlider.value);
+                    this.inputVoltage =
+                        Number(voltageSlider.value);
 
-                    this.updateVoltageLabel(voltage);
+                    if (voltageValue) {
 
-                    this.runSimulation(voltage);
-                }
-            );
-        }
+                        voltageValue.textContent =
+                            `${this.inputVoltage.toFixed(1)} V`;
 
-
-        /* Series resistance slider */
-
-        if (this.seriesResistance) {
-
-            this.seriesResistance.addEventListener(
-                'input',
-                () => {
-
-                    const resistance =
-                        Number(this.seriesResistance.value);
-
-                    this.simulation.updateParameters({
-                        seriesResistance: resistance
-                    });
-
-                    this.updateResistanceLabel(resistance);
+                    }
 
                     this.runSimulation();
-                }
-            );
 
-            this.updateResistanceLabel(
-                Number(this.seriesResistance.value)
+                }
             );
         }
 
 
-        /* Load resistance slider */
+        if (runButton) {
 
-        if (this.loadResistance) {
+            runButton.addEventListener(
+                'click',
+                () => this.runSimulation()
+            );
+        }
 
-            this.loadResistance.addEventListener(
+
+        if (resetButton) {
+
+            resetButton.addEventListener(
+                'click',
+                () => this.resetExperiment()
+            );
+        }
+
+
+        if (recordButton) {
+
+            recordButton.addEventListener(
+                'click',
+                () => this.recordObservation()
+            );
+        }
+
+
+        if (loadResistance) {
+
+            loadResistance.addEventListener(
                 'input',
                 () => {
 
-                    const resistance =
-                        Number(this.loadResistance.value);
-
                     this.simulation.updateParameters({
-                        loadResistance: resistance
+
+                        loadResistance:
+                            Number(loadResistance.value)
+
                     });
 
-                    this.updateLoadResistanceLabel(resistance);
-
                     this.runSimulation();
+
                 }
             );
-
-            this.updateLoadResistanceLabel(
-                Number(this.loadResistance.value)
-            );
         }
 
 
-        /* Buttons */
-
-        this.bindButton(
-            ['#runBtn', '#startSimulation'],
-            () => this.runSimulation()
-        );
-
-        this.bindButton(
-            ['#recordBtn', '#recordReading'],
-            () => this.recordObservation()
-        );
-
-        this.bindButton(
-            ['#resetBtn', '#resetSimulation'],
-            () => this.resetExperiment()
-        );
-
-        this.bindButton(
-            ['#rotateBtn'],
-            () => this.rotateCamera()
-        );
-
-        this.bindButton(
-            ['#zoomInBtn'],
-            () => this.zoomCamera(0.85)
-        );
-
-        this.bindButton(
-            ['#zoomOutBtn'],
-            () => this.zoomCamera(1.15)
-        );
-
-        this.bindButton(
-            ['#showHolesBtn'],
-            () => this.toggleHoleMarkers()
-        );
-
-        this.bindButton(
-            ['#generateGraphBtn'],
-            () => this.generateGraph()
+        window.addEventListener(
+            'resize',
+            () => this.handleResize()
         );
 
 
-        this.updateVoltageLabel(
-            this.voltageSlider
-                ? Number(this.voltageSlider.value)
-                : 0
-        );
+        this.bind3DInteraction();
     }
 
 
-    /* =================================================
-       16. BUTTON HELPER
-    ================================================= */
+    /* ================================================
+       RUN SIMULATION
+    ================================================ */
 
-    bindButton(selectors, callback) {
-
-        const button = this.findElement(...selectors);
-
-        if (!button) {
-            return;
-        }
-
-        button.addEventListener('click', event => {
-
-            event.preventDefault();
-
-            callback();
-        });
-    }
-
-
-    /* =================================================
-       17. LABEL UPDATES
-    ================================================= */
-
-    updateVoltageLabel(voltage) {
-
-        if (this.voltageValue) {
-
-            this.voltageValue.textContent =
-                `${Number(voltage).toFixed(1)} V`;
-        }
-    }
-
-
-    updateResistanceLabel(value) {
-
-        if (!this.resistanceDisplay) {
-            return;
-        }
-
-        this.resistanceDisplay.textContent =
-            `${Number(value).toLocaleString()} Ω`;
-    }
-
-
-    updateLoadResistanceLabel(value) {
-
-        if (!this.loadResistanceDisplay) {
-            return;
-        }
-
-        this.loadResistanceDisplay.textContent =
-            `${Number(value).toLocaleString()} Ω`;
-    }
-
-
-    /* =================================================
-       18. GET SUPPLY VOLTAGE
-    ================================================= */
-
-    getSupplyVoltage() {
-
-        if (this.voltageSlider) {
-
-            return Number(this.voltageSlider.value);
-        }
-
-        return 0;
-    }
-
-
-    /* =================================================
-       19. RUN SIMULATION
-    ================================================= */
-
-    runSimulation(voltage) {
+    runSimulation() {
 
         if (!this.simulation) {
-            return null;
+            return;
         }
-
-        const inputVoltage =
-            voltage === undefined
-                ? this.getSupplyVoltage()
-                : Number(voltage);
 
         const result =
-            this.simulation.run(inputVoltage);
-
-        if (!result) {
-            return null;
-        }
-
-        this.lastResult = result;
+            this.simulation.run(
+                this.inputVoltage
+            );
 
         this.updateMeters(result);
 
-        this.update3DMeters(result);
+        this.generateGraph();
+
+        this.isRunning = true;
 
         return result;
     }
 
 
-    /* =================================================
-       20. RESULT HELPERS
-    ================================================= */
-
-    getNumber(result, keys, fallback = 0) {
-
-        for (const key of keys) {
-
-            if (
-                result[key] !== undefined &&
-                Number.isFinite(Number(result[key]))
-            ) {
-                return Number(result[key]);
-            }
-        }
-
-        return fallback;
-    }
-
-
-    /* =================================================
-       21. UPDATE METERS
-    ================================================= */
+    /* ================================================
+       UPDATE DIGITAL METERS
+    ================================================ */
 
     updateMeters(result) {
 
@@ -895,474 +711,192 @@ class ZenerLaboratory {
             return;
         }
 
-        let current;
-        let voltage;
-        let power;
-
-        if (this.mode === 'load-regulation') {
-
-            current = this.getNumber(result, [
-                'loadCurrentMilliampere',
-                'currentMilliampere'
-            ]);
-
-            voltage = this.getNumber(result, [
-                'outputVoltage',
-                'diodeVoltage'
-            ]);
-
-            power = this.getNumber(result, [
-                'zenerPowerMilliwatt',
-                'powerMilliwatt'
-            ]);
-        }
-
-        else {
-
-            current = this.getNumber(result, [
-                'currentMilliampere'
-            ]);
-
-            voltage = this.getNumber(result, [
-                'diodeVoltage'
-            ]);
-
-            power = this.getNumber(result, [
-                'powerMilliwatt'
-            ]);
-        }
-
-
-        if (this.currentDisplay) {
-
-            this.currentDisplay.textContent =
-                `${current.toFixed(3)} mA`;
-        }
-
-        if (this.voltageDisplay) {
-
-            this.voltageDisplay.textContent =
-                `${voltage.toFixed(3)} V`;
-        }
-
-        if (this.powerDisplay) {
-
-            this.powerDisplay.textContent =
-                `${power.toFixed(3)} mW`;
-        }
-
-        if (this.regionDisplay) {
-
-            this.regionDisplay.textContent =
-                result.region || 'Operating';
-        }
-    }
-
-
-    /* =================================================
-       22. UPDATE 3D METERS
-    ================================================= */
-
-    update3DMeters(result) {
-
-        if (!result) {
-            return;
-        }
-
-        const current = this.getNumber(result, [
-            'currentMilliampere',
-            'loadCurrentMilliampere'
-        ]);
-
-        const voltage = this.getNumber(result, [
-            'diodeVoltage',
-            'outputVoltage'
-        ]);
-
-        this.update3DLabel(
-            this.components.ammeter,
-            `${current.toFixed(2)} mA`
+        this.setText(
+            'voltageReading',
+            `${(result.outputVoltage ??
+                result.diodeVoltage ??
+                0).toFixed(3)} V`
         );
 
-        this.update3DLabel(
-            this.components.voltmeter,
-            `${voltage.toFixed(2)} V`
+        this.setText(
+            'currentReading',
+            `${(result.loadCurrentMilliampere ??
+                result.currentMilliampere ??
+                0).toFixed(3)} mA`
+        );
+
+        this.setText(
+            'powerReading',
+            `${(result.powerMilliwatt ?? 0).toFixed(3)} mW`
+        );
+
+        this.setText(
+            'operatingRegion',
+            result.region ?? 'Standby'
         );
     }
 
 
-    update3DLabel(component, value) {
+    setText(id, value) {
 
-        if (!component) {
-            return;
+        const element =
+            document.getElementById(id);
+
+        if (element) {
+
+            element.textContent = value;
+
         }
-
-        const label = component.children.find(
-            child =>
-                child.isMesh &&
-                child.material &&
-                child.material.map
-        );
-
-        if (!label) {
-            return;
-        }
-
-        const canvas =
-            document.createElement('canvas');
-
-        canvas.width = 512;
-        canvas.height = 128;
-
-        const ctx = canvas.getContext('2d');
-
-        ctx.clearRect(0, 0, 512, 128);
-
-        ctx.fillStyle = '#7dffdc';
-
-        ctx.font = 'bold 48px Arial';
-
-        ctx.textAlign = 'center';
-
-        ctx.textBaseline = 'middle';
-
-        ctx.fillText(value, 256, 64);
-
-        const texture =
-            new THREE.CanvasTexture(canvas);
-
-        if (label.material.map) {
-            label.material.map.dispose();
-        }
-
-        label.material.map = texture;
-
-        label.material.needsUpdate = true;
     }
 
 
-    /* =================================================
-       23. RECORD OBSERVATION
-    ================================================= */
+    /* ================================================
+       OBSERVATION TABLE
+    ================================================ */
 
     recordObservation() {
-
-        if (!this.lastResult) {
-            this.runSimulation();
-        }
 
         const observation =
             this.simulation.recordObservation();
 
         if (!observation) {
-            this.showMessage(
-                'No reading available to record.'
-            );
-
             return;
         }
 
-        this.observations.push(observation);
+        const tbody =
+            document.getElementById('observationBody');
 
-        this.updateObservationTable();
-
-        this.showMessage(
-            'Observation recorded.'
-        );
-    }
-
-
-    /* =================================================
-       24. UPDATE OBSERVATION TABLE
-    ================================================= */
-
-    updateObservationTable() {
-
-        const tableBody = this.findElement(
-            '#observationBody',
-            '#observationTable tbody',
-            '#observationTableBody'
-        );
-
-        if (!tableBody) {
+        if (!tbody) {
             return;
         }
 
-        tableBody.replaceChildren();
+        const row =
+            document.createElement('tr');
 
-        this.observations.forEach((item, index) => {
+        const voltage =
+            observation.outputVoltage ??
+            observation.diodeVoltage ??
+            0;
 
-            const voltage = this.getNumber(item, [
-                'outputVoltage',
-                'diodeVoltage'
-            ]);
+        const current =
+            observation.loadCurrentMilliampere ??
+            observation.currentMilliampere ??
+            0;
 
-            const current = this.getNumber(item, [
-                'loadCurrentMilliampere',
-                'currentMilliampere'
-            ]);
+        const power =
+            observation.powerMilliwatt ?? 0;
 
-            const region =
-                item.region || 'Operating';
+        const values = [
 
-            const values = [
-                index + 1,
-                voltage.toFixed(3),
-                current.toFixed(3),
-                region
-            ];
+            observation.observationNumber,
 
-            const row =
-                document.createElement('tr');
+            `${observation.inputVoltage.toFixed(2)} V`,
 
-            values.forEach(value => {
+            `${voltage.toFixed(3)} V`,
 
-                const cell =
-                    document.createElement('td');
+            `${current.toFixed(3)} mA`,
 
-                cell.textContent = String(value);
+            `${power.toFixed(3)} mW`,
 
-                row.appendChild(cell);
-            });
+            observation.region
 
-            tableBody.appendChild(row);
-        });
+        ];
+
+        for (const value of values) {
+
+            const cell =
+                document.createElement('td');
+
+            cell.textContent = value;
+
+            row.appendChild(cell);
+        }
+
+        tbody.appendChild(row);
     }
 
 
-    /* =================================================
-       25. GENERATE GRAPH
-    ================================================= */
-
-    generateGraph() {
-
-        if (!this.graph || !this.simulation) {
-            return;
-        }
-
-        try {
-
-            if (this.mode === 'load-regulation') {
-
-                const data =
-                    this.simulation.generateLoadData();
-
-                this.graph
-                    .setGraphType('load')
-                    .setData(data);
-            }
-
-            else {
-
-                const data =
-                    this.simulation.generateVIData(
-                        0,
-                        12,
-                        60
-                    );
-
-                this.graph
-                    .setGraphType('vi')
-                    .setData(data);
-            }
-
-        } catch (error) {
-
-            console.error(
-                'Graph generation error:',
-                error
-            );
-
-            this.showMessage(
-                'Unable to generate graph.'
-            );
-        }
-    }
-
-
-    /* =================================================
-       26. RESET EXPERIMENT
-    ================================================= */
+    /* ================================================
+       RESET EXPERIMENT
+    ================================================ */
 
     resetExperiment() {
 
-        this.observations = [];
-
-        this.lastResult = null;
+        this.inputVoltage = 0;
 
         this.simulation.reset();
 
-        if (this.voltageSlider) {
-            this.voltageSlider.value = 0;
+        this.setText(
+            'voltageValue',
+            '0.0 V'
+        );
+
+        const slider =
+            document.getElementById('voltageSlider');
+
+        if (slider) {
+            slider.value = 0;
         }
 
-        if (this.seriesResistance) {
-            this.seriesResistance.value = 1000;
+        const tbody =
+            document.getElementById('observationBody');
+
+        if (tbody) {
+            tbody.innerHTML = '';
         }
-
-        if (this.loadResistance) {
-            this.loadResistance.value = 1000;
-        }
-
-        this.updateVoltageLabel(0);
-
-        this.updateResistanceLabel(1000);
-
-        this.updateLoadResistanceLabel(1000);
-
-        this.simulation.updateParameters({
-            seriesResistance: 1000,
-            loadResistance: 1000
-        });
-
-        this.runSimulation(0);
 
         if (this.graph) {
             this.graph.clear();
         }
 
-        this.updateObservationTable();
-
-        this.showMessage(
-            'Experiment reset successfully.'
-        );
-    }
-
-
-    /* =================================================
-       27. UPDATE HEADING
-    ================================================= */
-
-    updateExperimentHeading() {
-
-        const heading =
-            document.getElementById('experimentTitle');
-
-        if (heading) {
-            heading.textContent =
-                this.getExperimentTitle();
-        }
-    }
-
-
-    /* =================================================
-       28. CAMERA CONTROLS
-    ================================================= */
-
-    setupCameraControls() {
-
-        this.controls = new OrbitControls(
-            this.camera,
-            this.renderer.domElement
+        this.updateMeters(
+            this.simulation.run(0)
         );
 
-        this.controls.enableDamping = true;
+        this.generateGraph();
 
-        this.controls.dampingFactor = 0.06;
-
-        this.controls.enablePan = true;
-
-        this.controls.enableZoom = true;
-
-        this.controls.minDistance = 5;
-
-        this.controls.maxDistance = 30;
-
-        this.controls.maxPolarAngle =
-            Math.PI * 0.48;
-
-        this.controls.target.set(0, 0, 0);
-
-        this.controls.update();
+        this.isRunning = false;
     }
 
 
-    rotateCamera() {
+    /* ================================================
+       3D COMPONENT INTERACTION
+    ================================================ */
 
-        const current =
-            this.camera.position.clone();
+    bind3DInteraction() {
 
-        const angle = Math.PI / 4;
+        const canvas =
+            this.renderer.domElement;
 
-        const x =
-            current.x * Math.cos(angle) -
-            current.z * Math.sin(angle);
+        this.raycaster =
+            new THREE.Raycaster();
 
-        const z =
-            current.x * Math.sin(angle) +
-            current.z * Math.cos(angle);
+        this.pointer =
+            new THREE.Vector2();
 
-        this.camera.position.set(
-            x,
-            current.y,
-            z
-        );
-
-        this.controls.update();
-    }
-
-
-    zoomCamera(factor) {
-
-        const direction =
-            this.camera.position.clone()
-                .sub(this.controls.target);
-
-        direction.multiplyScalar(factor);
-
-        this.camera.position.copy(
-            this.controls.target.clone()
-                .add(direction)
-        );
-
-        this.controls.update();
-    }
-
-
-    toggleHoleMarkers() {
-
-        if (!this.holeMarkers) {
-            return;
-        }
-
-        this.holeMarkers.visible =
-            !this.holeMarkers.visible;
-    }
-
-
-    /* =================================================
-       29. COMPONENT SELECTION
-    ================================================= */
-
-    setupInteractions() {
-
-        this.renderer.domElement.addEventListener(
+        canvas.addEventListener(
             'pointerdown',
             event => {
 
                 const rect =
-                    this.renderer.domElement
-                        .getBoundingClientRect();
+                    canvas.getBoundingClientRect();
 
                 this.pointer.x =
                     ((event.clientX - rect.left) /
-                        rect.width) * 2 - 1;
+                    rect.width) * 2 - 1;
 
                 this.pointer.y =
                     -((event.clientY - rect.top) /
-                        rect.height) * 2 + 1;
+                    rect.height) * 2 + 1;
 
                 this.raycaster.setFromCamera(
                     this.pointer,
                     this.camera
                 );
 
-                const objects =
-                    Object.values(this.components);
-
                 const hits =
                     this.raycaster.intersectObjects(
-                        objects,
+                        this.components,
                         true
                     );
 
@@ -1370,305 +904,230 @@ class ZenerLaboratory {
                     return;
                 }
 
-                let selected = hits[0].object;
+                let object = hits[0].object;
 
                 while (
-                    selected.parent &&
-                    selected.parent !== this.scene &&
-                    !selected.userData.type &&
-                    !selected.userData.name
+                    object.parent &&
+                    !this.components.includes(object)
                 ) {
-                    selected = selected.parent;
+                    object = object.parent;
                 }
 
-                this.showComponentInformation(selected);
+                this.selectComponent(object);
             }
         );
     }
 
 
-    /* =================================================
-       30. COMPONENT INFORMATION
-    ================================================= */
+    selectComponent(component) {
 
-    showComponentInformation(object) {
-
-        const info =
-            document.getElementById('componentInfo');
-
-        if (!info) {
+        if (!component) {
             return;
         }
 
-        const data = object.userData || {};
+        this.selectedComponent = component;
 
-        const title =
-            data.name ||
-            data.type ||
-            'Electronic Component';
+        const type =
+            component.userData.componentType ||
+            'Laboratory Component';
 
-        const description =
-            data.description ||
-            'Select and inspect this laboratory component.';
+        this.setText(
+            'selectedComponent',
+            type.replaceAll('-', ' ').toUpperCase()
+        );
 
-        info.replaceChildren();
-
-        const heading =
-            document.createElement('strong');
-
-        heading.textContent = title;
-
-        const paragraph =
-            document.createElement('p');
-
-        paragraph.textContent = description;
-
-        info.append(heading, paragraph);
-
-        info.classList.add('active');
+        console.log(
+            'Selected component:',
+            type
+        );
     }
 
 
-    /* =================================================
-       31. RESIZE
-    ================================================= */
+    /* ================================================
+       CAMERA CONTROLS
+    ================================================ */
 
-    setupResize() {
+    handleCameraAction(action) {
 
-        const resize = () => {
-
-            const width =
-                this.container.clientWidth;
-
-            const height =
-                this.container.clientHeight;
-
-            if (!width || !height) {
-                return;
-            }
-
-            this.camera.aspect =
-                width / height;
-
-            this.camera.updateProjectionMatrix();
-
-            this.renderer.setSize(
-                width,
-                height
-            );
-
-            this.renderer.setPixelRatio(
-                Math.min(window.devicePixelRatio || 1, 2)
-            );
-        };
-
-        window.addEventListener('resize', resize);
-
-        if (window.ResizeObserver) {
-
-            this.resizeObserver =
-                new ResizeObserver(resize);
-
-            this.resizeObserver.observe(
-                this.container
-            );
+        if (!this.camera || !this.controls) {
+            return;
         }
 
-        resize();
+        switch (action) {
+
+            case 'reset':
+
+                this.camera.position.set(
+                    0,
+                    7,
+                    11
+                );
+
+                this.controls.target.set(
+                    0,
+                    0,
+                    0
+                );
+
+                break;
+
+
+            case 'top':
+
+                this.camera.position.set(
+                    0,
+                    13,
+                    0
+                );
+
+                break;
+
+
+            case 'front':
+
+                this.camera.position.set(
+                    0,
+                    4,
+                    13
+                );
+
+                break;
+
+
+            case 'rotate-left':
+
+                this.camera.position.applyAxisAngle(
+                    new THREE.Vector3(0, 1, 0),
+                    0.25
+                );
+
+                break;
+
+
+            case 'rotate-right':
+
+                this.camera.position.applyAxisAngle(
+                    new THREE.Vector3(0, 1, 0),
+                    -0.25
+                );
+
+                break;
+
+        }
+
+        this.controls.update();
     }
 
 
-    /* =================================================
-       32. ANIMATION LOOP
-    ================================================= */
+    /* ================================================
+       RESPONSIVE RESIZE
+    ================================================ */
+
+    handleResize() {
+
+        const container =
+            document.getElementById('three-container');
+
+        if (!container) {
+            return;
+        }
+
+        const width =
+            container.clientWidth;
+
+        const height =
+            container.clientHeight;
+
+        if (!width || !height) {
+            return;
+        }
+
+        this.camera.aspect =
+            width / height;
+
+        this.camera.updateProjectionMatrix();
+
+        this.renderer.setSize(
+            width,
+            height
+        );
+    }
+
+
+    /* ================================================
+       ANIMATION LOOP
+    ================================================ */
 
     animate() {
 
-        this.animationFrame =
-            requestAnimationFrame(
-                () => this.animate()
-            );
-
-        this.clock.getDelta();
+        requestAnimationFrame(
+            () => this.animate()
+        );
 
         if (this.controls) {
+
             this.controls.update();
+
         }
 
-        this.renderer.render(
-            this.scene,
-            this.camera
-        );
+        if (this.renderer && this.scene && this.camera) {
+
+            this.renderer.render(
+                this.scene,
+                this.camera
+            );
+
+        }
     }
 
 
-    /* =================================================
-       33. LOADING SCREEN
-    ================================================= */
-
-    hideLoadingScreen() {
-
-        const loader =
-            document.getElementById('loadingScreen');
-
-        if (!loader) {
-            return;
-        }
-
-        loader.classList.add('hidden');
-
-        setTimeout(() => {
-
-            loader.style.display = 'none';
-
-        }, 500);
-    }
-
-
-    showLoadingError() {
-
-        const loader =
-            document.getElementById('loadingScreen');
-
-        if (!loader) {
-            return;
-        }
-
-        loader.textContent =
-            'Unable to initialize the 3D laboratory. Please refresh the page.';
-    }
-
-
-    /* =================================================
-       34. TOAST MESSAGE
-    ================================================= */
-
-    showMessage(message) {
-
-        const previous =
-            document.getElementById('labToast');
-
-        if (previous) {
-            previous.remove();
-        }
-
-        const toast =
-            document.createElement('div');
-
-        toast.id = 'labToast';
-
-        toast.textContent = message;
-
-        toast.style.cssText = `
-            position: fixed;
-            right: 20px;
-            bottom: 20px;
-            z-index: 9999;
-            padding: 13px 18px;
-            border-radius: 9px;
-            background: #123b42;
-            color: white;
-            border: 1px solid #22d3ee;
-            font-size: 13px;
-            box-shadow: 0 8px 25px rgba(0,0,0,.3);
-        `;
-
-        document.body.appendChild(toast);
-
-        setTimeout(() => {
-            toast.remove();
-        }, 2500);
-    }
-
-
-    /* =================================================
-       35. CLEANUP
-    ================================================= */
+    /* ================================================
+       CLEANUP
+    ================================================ */
 
     destroy() {
 
-        if (this.animationFrame) {
-            cancelAnimationFrame(this.animationFrame);
-        }
-
-        if (this.resizeObserver) {
-            this.resizeObserver.disconnect();
+        if (this.graph) {
+            this.graph.destroy();
         }
 
         if (this.controls) {
             this.controls.dispose();
         }
 
-        if (this.graph && this.graph.destroy) {
-            this.graph.destroy();
-        }
-
         if (this.renderer) {
 
             this.renderer.dispose();
 
-            this.renderer.domElement.remove();
         }
 
-        this.scene.traverse(object => {
-
-            if (object.geometry) {
-                object.geometry.dispose();
-            }
-
-            if (object.material) {
-
-                const materials = Array.isArray(object.material)
-                    ? object.material
-                    : [object.material];
-
-                materials.forEach(material => {
-
-                    if (material.map) {
-                        material.map.dispose();
-                    }
-
-                    material.dispose();
-                });
-            }
-        });
+        window.removeEventListener(
+            'resize',
+            this.handleResize
+        );
     }
+
 }
 
 
 /* =====================================================
-   36. START APPLICATION
+   START LABORATORY
 ===================================================== */
-
-let laboratory = null;
 
 function startLaboratory() {
 
-    if (laboratory) {
-        return;
-    }
-
     try {
 
-        laboratory = new ZenerLaboratory();
-
-        window.zenerLab = laboratory;
+        window.zenerLab =
+            new ZenerLaboratory();
 
     } catch (error) {
 
         console.error(
-            'ZENER-LAB-360 startup error:',
+            'Zener Laboratory initialization failed:',
             error
         );
 
-        const loader =
-            document.getElementById('loadingScreen');
-
-        if (loader) {
-
-            loader.textContent =
-                'Laboratory initialization failed. Check the browser console.';
-        }
     }
 }
 
@@ -1684,4 +1143,5 @@ if (document.readyState === 'loading') {
 } else {
 
     startLaboratory();
+
 }
