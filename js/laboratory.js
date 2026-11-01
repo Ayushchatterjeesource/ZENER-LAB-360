@@ -3,7 +3,8 @@
    ZENER-LAB-360
    FILE: js/laboratory.js
 
-   Main Laboratory Controller
+   Main 3D Laboratory Controller
+   Circuit Builder Integration
 ===================================================== */
 
 import * as THREE from 'three';
@@ -16,15 +17,25 @@ import {
     createComponent
 } from './components.js';
 
-import { createHoleMarkers } from './breadboard.js';
+import {
+    createHoleMarkers
+} from './breadboard.js';
 
-import { CircuitBuilder } from './circuit-builder.js';
+import {
+    CircuitBuilder
+} from './circuit-builder.js';
 
-import { ZenerSimulation } from './simulation.js';
+import {
+    ZenerSimulation
+} from './simulation.js';
 
-import { ExperimentGraph } from './graph.js';
+import {
+    ExperimentGraph
+} from './graph.js';
 
-import { VivaModule } from './viva.js';
+import {
+    VivaModule
+} from './viva.js';
 
 
 class ZenerLaboratory {
@@ -32,37 +43,37 @@ class ZenerLaboratory {
     constructor() {
 
         this.scene = null;
-
         this.camera = null;
-
         this.renderer = null;
-
         this.controls = null;
 
-        this.clock = new THREE.Clock();
+        this.builder = null;
+        this.simulation = null;
+        this.graph = null;
+        this.viva = null;
 
         this.components = [];
 
-        this.selectedComponent = null;
-
-        this.simulation = null;
-
-        this.graph = null;
-
-        this.viva = null;
+        this.holeMarkers = null;
 
         this.mode = this.detectMode();
 
         this.inputVoltage = 0;
 
-        this.isRunning = false;
+        this.wireMode = false;
+
+        this.wireColor = 'red';
+
+        this.firstSelectedHole = null;
+
+        this.dragging = false;
 
         this.init();
     }
 
 
     /* ================================================
-       DETECT EXPERIMENT
+       DETECT MODE
     ================================================ */
 
     detectMode() {
@@ -98,7 +109,7 @@ class ZenerLaboratory {
 
         this.createLaboratory();
 
-        this.createControls();
+        this.createCircuitBuilder();
 
         this.createSimulation();
 
@@ -110,19 +121,17 @@ class ZenerLaboratory {
 
         this.animate();
 
-        this.updateMeters(
-            this.simulation.run(0)
-        );
+        this.runSimulation();
 
         console.log(
-            'ZENER-LAB-360 initialized:',
+            'ZENER-LAB-360 Ready:',
             this.mode
         );
     }
 
 
     /* ================================================
-       THREE.JS SCENE
+       SCENE
     ================================================ */
 
     createScene() {
@@ -134,8 +143,8 @@ class ZenerLaboratory {
 
         this.scene.fog = new THREE.Fog(
             '#101827',
-            12,
-            35
+            15,
+            40
         );
     }
 
@@ -150,17 +159,18 @@ class ZenerLaboratory {
             document.getElementById('three-container');
 
         const width =
-            container?.clientWidth || 800;
+            container.clientWidth || 800;
 
         const height =
-            container?.clientHeight || 500;
+            container.clientHeight || 500;
 
-        this.camera = new THREE.PerspectiveCamera(
-            45,
-            width / height,
-            0.1,
-            100
-        );
+        this.camera =
+            new THREE.PerspectiveCamera(
+                45,
+                width / height,
+                0.1,
+                100
+            );
 
         this.camera.position.set(
             0,
@@ -180,21 +190,26 @@ class ZenerLaboratory {
             document.getElementById('three-container');
 
         if (!container) {
+
             throw new Error(
                 'Three.js container not found.'
             );
         }
 
-        this.renderer = new THREE.WebGLRenderer({
+        this.renderer =
+            new THREE.WebGLRenderer({
 
-            antialias: true,
+                antialias: true,
 
-            alpha: true
+                alpha: true
 
-        });
+            });
 
         this.renderer.setPixelRatio(
-            Math.min(window.devicePixelRatio, 2)
+            Math.min(
+                window.devicePixelRatio || 1,
+                2
+            )
         );
 
         this.renderer.setSize(
@@ -203,9 +218,6 @@ class ZenerLaboratory {
         );
 
         this.renderer.shadowMap.enabled = true;
-
-        this.renderer.shadowMap.type =
-            THREE.PCFSoftShadowMap;
 
         this.renderer.outputColorSpace =
             THREE.SRGBColorSpace;
@@ -216,20 +228,17 @@ class ZenerLaboratory {
             this.renderer.domElement
         );
 
-        this.controls = new OrbitControls(
-            this.camera,
-            this.renderer.domElement
-        );
+        this.controls =
+            new OrbitControls(
+                this.camera,
+                this.renderer.domElement
+            );
 
         this.controls.enableDamping = true;
 
         this.controls.dampingFactor = 0.06;
 
-        this.controls.target.set(
-            0,
-            0,
-            0
-        );
+        this.controls.target.set(0, 0, 0);
 
         this.controls.minDistance = 4;
 
@@ -246,39 +255,33 @@ class ZenerLaboratory {
 
     createLighting() {
 
-        const ambient = new THREE.AmbientLight(
-            '#ffffff',
-            1.5
+        this.scene.add(
+            new THREE.AmbientLight(
+                '#ffffff',
+                1.5
+            )
         );
 
-        this.scene.add(ambient);
+        const mainLight =
+            new THREE.DirectionalLight(
+                '#ffffff',
+                2
+            );
 
-        const mainLight = new THREE.DirectionalLight(
-            '#ffffff',
-            2
-        );
-
-        mainLight.position.set(
-            5,
-            10,
-            7
-        );
+        mainLight.position.set(5, 10, 7);
 
         mainLight.castShadow = true;
 
         this.scene.add(mainLight);
 
-        const fillLight = new THREE.PointLight(
-            '#22d3ee',
-            1.2,
-            20
-        );
+        const fillLight =
+            new THREE.PointLight(
+                '#22d3ee',
+                1.2,
+                20
+            );
 
-        fillLight.position.set(
-            -5,
-            4,
-            -3
-        );
+        fillLight.position.set(-5, 4, -3);
 
         this.scene.add(fillLight);
     }
@@ -290,19 +293,20 @@ class ZenerLaboratory {
 
     createLaboratory() {
 
-        const floor = new THREE.Mesh(
+        const floor =
+            new THREE.Mesh(
 
-            new THREE.PlaneGeometry(30, 30),
+                new THREE.PlaneGeometry(30, 30),
 
-            new THREE.MeshStandardMaterial({
+                new THREE.MeshStandardMaterial({
 
-                color: '#202d3e',
+                    color: '#202d3e',
 
-                roughness: 0.85
+                    roughness: 0.85
 
-            })
+                })
 
-        );
+            );
 
         floor.rotation.x = -Math.PI / 2;
 
@@ -313,23 +317,24 @@ class ZenerLaboratory {
         this.scene.add(floor);
 
 
-        const table = new THREE.Mesh(
+        const table =
+            new THREE.Mesh(
 
-            new THREE.BoxGeometry(
-                12,
-                0.35,
-                7
-            ),
+                new THREE.BoxGeometry(
+                    12,
+                    0.35,
+                    7
+                ),
 
-            new THREE.MeshStandardMaterial({
+                new THREE.MeshStandardMaterial({
 
-                color: '#34465b',
+                    color: '#34465b',
 
-                roughness: 0.55
+                    roughness: 0.55
 
-            })
+                })
 
-        );
+            );
 
         table.position.y = -0.2;
 
@@ -340,78 +345,121 @@ class ZenerLaboratory {
         this.scene.add(table);
 
 
-        const breadboard = createBreadboard();
+        this.breadboard = createBreadboard();
 
-        breadboard.position.set(
+        this.breadboard.position.set(
             0,
             0.02,
             0
         );
 
-        breadboard.scale.setScalar(1);
-
-        this.scene.add(breadboard);
-
-        this.breadboard = breadboard;
-
-
-        try {
-
-            this.holeMarkers =
-                createHoleMarkers(this.scene, {
-                    visible: false
-                });
-
-        } catch (error) {
-
-            console.warn(
-                'Breadboard markers could not be initialized:',
-                error
-            );
-
-        }
-
-
-        this.createLabComponents();
+        this.scene.add(this.breadboard);
     }
 
 
     /* ================================================
-       COMPONENTS
+       CIRCUIT BUILDER
     ================================================ */
 
-    createLabComponents() {
+    createCircuitBuilder() {
+
+        this.holeMarkers =
+            createHoleMarkers(
+                this.scene,
+                {
+                    visible: true
+                }
+            );
+
+        this.builder =
+            new CircuitBuilder(
+                this.scene,
+                {
+                    board: this.holeMarkers.board,
+                    snapDistance: 0.45,
+                    wireHeight: 0.38
+                }
+            );
+
+        this.createComponents();
+
+        this.createInteractionHelpers();
+    }
+
+
+    /* ================================================
+       ADD COMPONENTS
+    ================================================ */
+
+    createComponents() {
 
         const layout = [
 
             {
+                id: 'dc-supply',
                 type: 'dc-supply',
-                position: [-4, 0.25, -1.5]
+                position: [-4, 0.25, -1.5],
+                terminals: [
+                    {
+                        id: 'positive',
+                        localPosition: [-0.2, 0, 0]
+                    },
+                    {
+                        id: 'negative',
+                        localPosition: [0.2, 0, 0]
+                    }
+                ]
             },
 
             {
+                id: 'ammeter',
                 type: 'ammeter',
-                position: [-2.5, 0.25, -1.5]
+                position: [-2.5, 0.25, -1.5],
+                terminals: [
+                    { id: 'input' },
+                    { id: 'output' }
+                ]
             },
 
             {
+                id: 'voltmeter',
                 type: 'voltmeter',
-                position: [2.8, 0.25, -1.5]
+                position: [2.8, 0.25, -1.5],
+                terminals: [
+                    { id: 'positive' },
+                    { id: 'negative' }
+                ]
             },
 
             {
+                id: 'resistor',
                 type: 'resistor',
-                position: [-2, 0.25, 1.5]
+                position: [-2, 0.25, 1.5],
+                terminals: [
+                    { id: 'left' },
+                    { id: 'right' }
+                ]
             },
 
             {
+                id: 'zener-diode',
                 type: 'zener-diode',
-                position: [0, 0.25, 1.5]
+                position: [0, 0.25, 1.5],
+                terminals: [
+                    { id: 'anode' },
+                    { id: 'cathode' }
+                ]
             },
 
             {
+                id: 'potentiometer',
                 type: 'potentiometer',
-                position: [2, 0.25, 1.5]
+                position: [2, 0.25, 1.5],
+                terminals: [
+                    { id: 'terminal-1' },
+                    { id: 'terminal-2' },
+                    { id: 'wiper' }
+                ]
             }
 
         ];
@@ -421,23 +469,18 @@ class ZenerLaboratory {
 
             try {
 
-                const component =
+                const object =
                     createComponent(item.type);
 
-                if (!component) {
+                if (!object) {
                     continue;
                 }
 
-                component.position.set(
+                object.position.set(
                     ...item.position
                 );
 
-                component.userData.componentType =
-                    item.type;
-
-                component.userData.selectable = true;
-
-                component.traverse(child => {
+                object.traverse(child => {
 
                     if (child.isMesh) {
 
@@ -449,13 +492,17 @@ class ZenerLaboratory {
 
                 });
 
-                this.scene.add(component);
+                this.builder.addComponent(
+                    item.id,
+                    object,
+                    item.terminals
+                );
 
-                this.components.push(component);
+                this.components.push(object);
 
             } catch (error) {
 
-                console.warn(
+                console.error(
                     'Component creation failed:',
                     item.type,
                     error
@@ -467,28 +514,409 @@ class ZenerLaboratory {
 
 
     /* ================================================
+       INTERACTION HELPERS
+    ================================================ */
+
+    createInteractionHelpers() {
+
+        this.raycaster =
+            new THREE.Raycaster();
+
+        this.pointer =
+            new THREE.Vector2();
+
+        this.renderer.domElement.style.touchAction =
+            'none';
+
+        this.bindCanvasInteractions();
+    }
+
+
+    /* ================================================
+       CANVAS INTERACTIONS
+    ================================================ */
+
+    bindCanvasInteractions() {
+
+        const canvas =
+            this.renderer.domElement;
+
+        canvas.addEventListener(
+            'pointerdown',
+            event => this.handlePointerDown(event)
+        );
+
+        canvas.addEventListener(
+            'pointermove',
+            event => this.handlePointerMove(event)
+        );
+
+        canvas.addEventListener(
+            'pointerup',
+            event => this.handlePointerUp(event)
+        );
+
+        canvas.addEventListener(
+            'pointercancel',
+            () => this.handlePointerUp()
+        );
+    }
+
+
+    /* ================================================
+       POINTER COORDINATES
+    ================================================ */
+
+    updatePointer(event) {
+
+        const rect =
+            this.renderer.domElement
+                .getBoundingClientRect();
+
+        this.pointer.x =
+            ((event.clientX - rect.left) /
+            rect.width) * 2 - 1;
+
+        this.pointer.y =
+            -((event.clientY - rect.top) /
+            rect.height) * 2 + 1;
+
+        this.raycaster.setFromCamera(
+            this.pointer,
+            this.camera
+        );
+    }
+
+
+    /* ================================================
+       POINTER DOWN
+    ================================================ */
+
+    handlePointerDown(event) {
+
+        this.updatePointer(event);
+
+        if (this.wireMode) {
+
+            this.selectBreadboardHole();
+
+            return;
+        }
+
+        const started =
+            this.builder.startDrag(
+                event,
+                this.camera,
+                this.renderer.domElement
+            );
+
+        if (started) {
+
+            this.dragging = true;
+
+            this.controls.enabled = false;
+
+            this.renderer.domElement.setPointerCapture(
+                event.pointerId
+            );
+
+        }
+    }
+
+
+    /* ================================================
+       POINTER MOVE
+    ================================================ */
+
+    handlePointerMove(event) {
+
+        if (!this.dragging) {
+            return;
+        }
+
+        this.builder.moveDrag(
+            event,
+            this.camera,
+            this.renderer.domElement
+        );
+    }
+
+
+    /* ================================================
+       POINTER UP
+    ================================================ */
+
+    handlePointerUp(event) {
+
+        if (this.dragging) {
+
+            this.builder.endDrag();
+
+            this.dragging = false;
+
+            this.controls.enabled = true;
+
+            if (
+                event?.pointerId !== undefined &&
+                this.renderer.domElement.hasPointerCapture(
+                    event.pointerId
+                )
+            ) {
+
+                this.renderer.domElement.releasePointerCapture(
+                    event.pointerId
+                );
+
+            }
+        }
+    }
+
+
+    /* ================================================
+       SELECT BREADBOARD HOLE
+    ================================================ */
+
+    selectBreadboardHole() {
+
+        const markers =
+            this.holeMarkers.group.children;
+
+        const hits =
+            this.raycaster.intersectObjects(
+                markers,
+                false
+            );
+
+        if (!hits.length) {
+            return;
+        }
+
+        const holeId =
+            hits[0].object.userData.holeId;
+
+        if (!holeId) {
+            return;
+        }
+
+        if (!this.firstSelectedHole) {
+
+            this.firstSelectedHole = holeId;
+
+            this.setStatus(
+                `First hole selected: ${holeId}. Select another hole.`
+            );
+
+            this.highlightHole(holeId);
+
+            return;
+        }
+
+        if (this.firstSelectedHole === holeId) {
+
+            this.firstSelectedHole = null;
+
+            this.setStatus(
+                'Selection cancelled.'
+            );
+
+            return;
+        }
+
+        const result =
+            this.builder.connectHoles(
+                this.firstSelectedHole,
+                holeId,
+                this.wireColor
+            );
+
+        if (result.success) {
+
+            this.setStatus(
+                `Wire connected: ${this.firstSelectedHole} → ${holeId}`
+            );
+
+        } else {
+
+            this.setStatus(
+                result.message
+            );
+
+        }
+
+        this.firstSelectedHole = null;
+
+        this.clearHoleHighlight();
+    }
+
+
+    /* ================================================
+       HOLE HIGHLIGHT
+    ================================================ */
+
+    highlightHole(holeId) {
+
+        this.clearHoleHighlight();
+
+        const marker =
+            this.holeMarkers.getMarker(holeId);
+
+        if (marker) {
+
+            marker.material.color.set('#facc15');
+
+            this.selectedMarker = marker;
+
+        }
+    }
+
+
+    clearHoleHighlight() {
+
+        if (this.selectedMarker) {
+
+            this.selectedMarker.material.color.set(
+                '#94a3b8'
+            );
+
+            this.selectedMarker = null;
+        }
+    }
+
+
+    /* ================================================
+       WIRE MODE
+    ================================================ */
+
+    toggleWireMode() {
+
+        this.wireMode = !this.wireMode;
+
+        this.firstSelectedHole = null;
+
+        this.clearHoleHighlight();
+
+        this.controls.enabled = !this.wireMode;
+
+        this.setStatus(
+            this.wireMode
+                ? 'Wire mode active. Select two breadboard holes.'
+                : 'Wire mode disabled.'
+        );
+
+        return this.wireMode;
+    }
+
+
+    /* ================================================
+       WIRE COLOR
+    ================================================ */
+
+    setWireColor(color) {
+
+        const validColors = [
+            'red',
+            'black',
+            'yellow',
+            'green'
+        ];
+
+        if (validColors.includes(color)) {
+
+            this.wireColor = color;
+
+        }
+    }
+
+
+    /* ================================================
+       DELETE LAST WIRE
+    ================================================ */
+
+    deleteLastWire() {
+
+        const ids =
+            Array.from(
+                this.builder.wires.keys()
+            );
+
+        if (!ids.length) {
+            return false;
+        }
+
+        const lastId =
+            ids[ids.length - 1];
+
+        const result =
+            this.builder.removeWire(lastId);
+
+        this.setStatus(
+            result
+                ? 'Last wire removed.'
+                : 'Unable to remove wire.'
+        );
+
+        return result;
+    }
+
+
+    /* ================================================
+       STATUS MESSAGE
+    ================================================ */
+
+    setStatus(message) {
+
+        const element =
+            document.getElementById('circuitStatus');
+
+        if (element) {
+
+            element.textContent = message;
+
+        }
+
+        console.log(message);
+    }
+
+
+    /* ================================================
        SIMULATION
     ================================================ */
 
     createSimulation() {
 
-        this.simulation = new ZenerSimulation({
+        this.simulation =
+            new ZenerSimulation({
 
-            seriesResistance: 1000,
+                seriesResistance: 1000,
 
-            loadResistance: 1000,
+                loadResistance: 1000,
 
-            zenerVoltage: 5.1,
+                zenerVoltage: 5.1,
 
-            forwardVoltage: 0.7,
+                forwardVoltage: 0.7,
 
-            zenerResistance: 8,
+                zenerResistance: 8,
 
-            maxCurrent: 0.02
+                maxCurrent: 0.02
 
-        });
+            });
 
         this.simulation.setMode(this.mode);
+    }
+
+
+    runSimulation() {
+
+        const result =
+            this.simulation.run(
+                this.inputVoltage
+            );
+
+        this.updateMeters(result);
+
+        this.generateGraph();
+
+        return result;
     }
 
 
@@ -501,18 +929,10 @@ class ZenerLaboratory {
         const canvas =
             document.getElementById('viGraph');
 
-        if (!canvas) {
-            return;
-        }
+        if (!canvas) return;
 
         this.graph =
             new ExperimentGraph(canvas);
-
-        this.graph.setGraphType(
-            this.mode === 'load-regulation'
-                ? 'load'
-                : 'vi'
-        );
 
         this.generateGraph();
     }
@@ -520,196 +940,38 @@ class ZenerLaboratory {
 
     generateGraph() {
 
-        if (!this.graph) {
-            return;
-        }
+        if (!this.graph) return;
 
         if (this.mode === 'load-regulation') {
 
-            const data =
-                this.simulation.generateLoadData();
-
             this.graph
                 .setGraphType('load')
-                .setData(data);
+                .setData(
+                    this.simulation.generateLoadData()
+                );
 
         } else {
 
-            const data =
-                this.simulation.generateVIData(
-                    0,
-                    12,
-                    60
-                );
-
             this.graph
                 .setGraphType('vi')
-                .setData(data);
-
+                .setData(
+                    this.simulation.generateVIData(
+                        0,
+                        12,
+                        60
+                    )
+                );
         }
     }
 
 
     /* ================================================
-       VIVA
-    ================================================ */
-
-    createViva() {
-
-        const container =
-            document.getElementById('vivaContainer');
-
-        if (!container) {
-            return;
-        }
-
-        this.viva =
-            new VivaModule(container);
-    }
-
-
-    /* ================================================
-       UI EVENT LISTENERS
-    ================================================ */
-
-    bindUI() {
-
-        const voltageSlider =
-            document.getElementById('voltageSlider');
-
-        const voltageValue =
-            document.getElementById('voltageValue');
-
-        const runButton =
-            document.getElementById('runBtn');
-
-        const resetButton =
-            document.getElementById('resetBtn');
-
-        const recordButton =
-            document.getElementById('recordBtn');
-
-        const loadResistance =
-            document.getElementById('loadResistance');
-
-
-        if (voltageSlider) {
-
-            this.inputVoltage =
-                Number(voltageSlider.value);
-
-            voltageSlider.addEventListener(
-                'input',
-                () => {
-
-                    this.inputVoltage =
-                        Number(voltageSlider.value);
-
-                    if (voltageValue) {
-
-                        voltageValue.textContent =
-                            `${this.inputVoltage.toFixed(1)} V`;
-
-                    }
-
-                    this.runSimulation();
-
-                }
-            );
-        }
-
-
-        if (runButton) {
-
-            runButton.addEventListener(
-                'click',
-                () => this.runSimulation()
-            );
-        }
-
-
-        if (resetButton) {
-
-            resetButton.addEventListener(
-                'click',
-                () => this.resetExperiment()
-            );
-        }
-
-
-        if (recordButton) {
-
-            recordButton.addEventListener(
-                'click',
-                () => this.recordObservation()
-            );
-        }
-
-
-        if (loadResistance) {
-
-            loadResistance.addEventListener(
-                'input',
-                () => {
-
-                    this.simulation.updateParameters({
-
-                        loadResistance:
-                            Number(loadResistance.value)
-
-                    });
-
-                    this.runSimulation();
-
-                }
-            );
-        }
-
-
-        window.addEventListener(
-            'resize',
-            () => this.handleResize()
-        );
-
-
-        this.bind3DInteraction();
-    }
-
-
-    /* ================================================
-       RUN SIMULATION
-    ================================================ */
-
-    runSimulation() {
-
-        if (!this.simulation) {
-            return;
-        }
-
-        const result =
-            this.simulation.run(
-                this.inputVoltage
-            );
-
-        this.updateMeters(result);
-
-        this.generateGraph();
-
-        this.isRunning = true;
-
-        return result;
-    }
-
-
-    /* ================================================
-       UPDATE DIGITAL METERS
+       DIGITAL METERS
     ================================================ */
 
     updateMeters(result) {
 
-        if (!result) {
-            return;
-        }
+        if (!result) return;
 
         this.setText(
             'voltageReading',
@@ -743,9 +1005,7 @@ class ZenerLaboratory {
             document.getElementById(id);
 
         if (element) {
-
             element.textContent = value;
-
         }
     }
 
@@ -759,32 +1019,15 @@ class ZenerLaboratory {
         const observation =
             this.simulation.recordObservation();
 
-        if (!observation) {
-            return;
-        }
+        if (!observation) return;
 
         const tbody =
             document.getElementById('observationBody');
 
-        if (!tbody) {
-            return;
-        }
+        if (!tbody) return;
 
         const row =
             document.createElement('tr');
-
-        const voltage =
-            observation.outputVoltage ??
-            observation.diodeVoltage ??
-            0;
-
-        const current =
-            observation.loadCurrentMilliampere ??
-            observation.currentMilliampere ??
-            0;
-
-        const power =
-            observation.powerMilliwatt ?? 0;
 
         const values = [
 
@@ -792,11 +1035,15 @@ class ZenerLaboratory {
 
             `${observation.inputVoltage.toFixed(2)} V`,
 
-            `${voltage.toFixed(3)} V`,
+            `${(observation.outputVoltage ??
+                observation.diodeVoltage ??
+                0).toFixed(3)} V`,
 
-            `${current.toFixed(3)} mA`,
+            `${(observation.loadCurrentMilliampere ??
+                observation.currentMilliampere ??
+                0).toFixed(3)} mA`,
 
-            `${power.toFixed(3)} mW`,
+            `${(observation.powerMilliwatt ?? 0).toFixed(3)} mW`,
 
             observation.region
 
@@ -817,7 +1064,162 @@ class ZenerLaboratory {
 
 
     /* ================================================
-       RESET EXPERIMENT
+       VIVA
+    ================================================ */
+
+    createViva() {
+
+        const container =
+            document.getElementById('vivaContainer');
+
+        if (container) {
+
+            this.viva =
+                new VivaModule(container);
+
+        }
+    }
+
+
+    /* ================================================
+       UI EVENTS
+    ================================================ */
+
+    bindUI() {
+
+        const slider =
+            document.getElementById('voltageSlider');
+
+        const runButton =
+            document.getElementById('runBtn');
+
+        const resetButton =
+            document.getElementById('resetBtn');
+
+        const recordButton =
+            document.getElementById('recordBtn');
+
+        const loadResistance =
+            document.getElementById('loadResistance');
+
+
+        slider?.addEventListener(
+            'input',
+            () => {
+
+                this.inputVoltage =
+                    Number(slider.value);
+
+                this.setText(
+                    'voltageValue',
+                    `${this.inputVoltage.toFixed(1)} V`
+                );
+
+                this.runSimulation();
+
+            }
+        );
+
+
+        runButton?.addEventListener(
+            'click',
+            () => this.runSimulation()
+        );
+
+
+        resetButton?.addEventListener(
+            'click',
+            () => this.resetExperiment()
+        );
+
+
+        recordButton?.addEventListener(
+            'click',
+            () => this.recordObservation()
+        );
+
+
+        loadResistance?.addEventListener(
+            'input',
+            () => {
+
+                this.simulation.updateParameters({
+
+                    loadResistance:
+                        Number(loadResistance.value)
+
+                });
+
+                this.runSimulation();
+
+            }
+        );
+
+
+        document.getElementById('wireModeBtn')
+            ?.addEventListener(
+                'click',
+                () => this.toggleWireMode()
+            );
+
+
+        document.getElementById('wireColor')
+            ?.addEventListener(
+                'change',
+                event => this.setWireColor(
+                    event.target.value
+                )
+            );
+
+
+        document.getElementById('deleteWireBtn')
+            ?.addEventListener(
+                'click',
+                () => this.deleteLastWire()
+            );
+
+
+        document.getElementById('resetCameraBtn')
+            ?.addEventListener(
+                'click',
+                () => this.handleCameraAction('reset')
+            );
+
+
+        window.addEventListener(
+            'resize',
+            () => this.handleResize()
+        );
+    }
+
+
+    /* ================================================
+       CAMERA ACTIONS
+    ================================================ */
+
+    handleCameraAction(action) {
+
+        if (action === 'reset') {
+
+            this.camera.position.set(
+                0,
+                7,
+                11
+            );
+
+            this.controls.target.set(
+                0,
+                0,
+                0
+            );
+
+            this.controls.update();
+        }
+    }
+
+
+    /* ================================================
+       RESET
     ================================================ */
 
     resetExperiment() {
@@ -826,10 +1228,11 @@ class ZenerLaboratory {
 
         this.simulation.reset();
 
-        this.setText(
-            'voltageValue',
-            '0.0 V'
-        );
+        this.builder.reset();
+
+        this.firstSelectedHole = null;
+
+        this.clearHoleHighlight();
 
         const slider =
             document.getElementById('voltageSlider');
@@ -845,182 +1248,22 @@ class ZenerLaboratory {
             tbody.innerHTML = '';
         }
 
-        if (this.graph) {
-            this.graph.clear();
-        }
-
-        this.updateMeters(
-            this.simulation.run(0)
-        );
-
-        this.generateGraph();
-
-        this.isRunning = false;
-    }
-
-
-    /* ================================================
-       3D COMPONENT INTERACTION
-    ================================================ */
-
-    bind3DInteraction() {
-
-        const canvas =
-            this.renderer.domElement;
-
-        this.raycaster =
-            new THREE.Raycaster();
-
-        this.pointer =
-            new THREE.Vector2();
-
-        canvas.addEventListener(
-            'pointerdown',
-            event => {
-
-                const rect =
-                    canvas.getBoundingClientRect();
-
-                this.pointer.x =
-                    ((event.clientX - rect.left) /
-                    rect.width) * 2 - 1;
-
-                this.pointer.y =
-                    -((event.clientY - rect.top) /
-                    rect.height) * 2 + 1;
-
-                this.raycaster.setFromCamera(
-                    this.pointer,
-                    this.camera
-                );
-
-                const hits =
-                    this.raycaster.intersectObjects(
-                        this.components,
-                        true
-                    );
-
-                if (!hits.length) {
-                    return;
-                }
-
-                let object = hits[0].object;
-
-                while (
-                    object.parent &&
-                    !this.components.includes(object)
-                ) {
-                    object = object.parent;
-                }
-
-                this.selectComponent(object);
-            }
-        );
-    }
-
-
-    selectComponent(component) {
-
-        if (!component) {
-            return;
-        }
-
-        this.selectedComponent = component;
-
-        const type =
-            component.userData.componentType ||
-            'Laboratory Component';
-
         this.setText(
-            'selectedComponent',
-            type.replaceAll('-', ' ').toUpperCase()
+            'voltageValue',
+            '0.0 V'
         );
 
-        console.log(
-            'Selected component:',
-            type
+        this.setStatus(
+            'Experiment reset. Circuit components need to be placed again.'
         );
+
+        this.runSimulation();
+
     }
 
 
     /* ================================================
-       CAMERA CONTROLS
-    ================================================ */
-
-    handleCameraAction(action) {
-
-        if (!this.camera || !this.controls) {
-            return;
-        }
-
-        switch (action) {
-
-            case 'reset':
-
-                this.camera.position.set(
-                    0,
-                    7,
-                    11
-                );
-
-                this.controls.target.set(
-                    0,
-                    0,
-                    0
-                );
-
-                break;
-
-
-            case 'top':
-
-                this.camera.position.set(
-                    0,
-                    13,
-                    0
-                );
-
-                break;
-
-
-            case 'front':
-
-                this.camera.position.set(
-                    0,
-                    4,
-                    13
-                );
-
-                break;
-
-
-            case 'rotate-left':
-
-                this.camera.position.applyAxisAngle(
-                    new THREE.Vector3(0, 1, 0),
-                    0.25
-                );
-
-                break;
-
-
-            case 'rotate-right':
-
-                this.camera.position.applyAxisAngle(
-                    new THREE.Vector3(0, 1, 0),
-                    -0.25
-                );
-
-                break;
-
-        }
-
-        this.controls.update();
-    }
-
-
-    /* ================================================
-       RESPONSIVE RESIZE
+       RESIZE
     ================================================ */
 
     handleResize() {
@@ -1028,19 +1271,13 @@ class ZenerLaboratory {
         const container =
             document.getElementById('three-container');
 
-        if (!container) {
-            return;
-        }
+        if (!container) return;
 
-        const width =
-            container.clientWidth;
+        const width = container.clientWidth;
 
-        const height =
-            container.clientHeight;
+        const height = container.clientHeight;
 
-        if (!width || !height) {
-            return;
-        }
+        if (!width || !height) return;
 
         this.camera.aspect =
             width / height;
@@ -1055,29 +1292,22 @@ class ZenerLaboratory {
 
 
     /* ================================================
-       ANIMATION LOOP
+       ANIMATION
     ================================================ */
 
     animate() {
 
-        requestAnimationFrame(
-            () => this.animate()
-        );
-
-        if (this.controls) {
-
-            this.controls.update();
-
-        }
-
-        if (this.renderer && this.scene && this.camera) {
-
-            this.renderer.render(
-                this.scene,
-                this.camera
+        this.animationFrame =
+            requestAnimationFrame(
+                () => this.animate()
             );
 
-        }
+        this.controls?.update();
+
+        this.renderer.render(
+            this.scene,
+            this.camera
+        );
     }
 
 
@@ -1087,31 +1317,26 @@ class ZenerLaboratory {
 
     destroy() {
 
-        if (this.graph) {
-            this.graph.destroy();
-        }
-
-        if (this.controls) {
-            this.controls.dispose();
-        }
-
-        if (this.renderer) {
-
-            this.renderer.dispose();
-
-        }
-
-        window.removeEventListener(
-            'resize',
-            this.handleResize
+        cancelAnimationFrame(
+            this.animationFrame
         );
+
+        this.builder?.dispose();
+
+        this.holeMarkers?.dispose();
+
+        this.graph?.destroy();
+
+        this.controls?.dispose();
+
+        this.renderer?.dispose();
     }
 
 }
 
 
 /* =====================================================
-   START LABORATORY
+   START
 ===================================================== */
 
 function startLaboratory() {
@@ -1124,7 +1349,7 @@ function startLaboratory() {
     } catch (error) {
 
         console.error(
-            'Zener Laboratory initialization failed:',
+            'Laboratory initialization failed:',
             error
         );
 
