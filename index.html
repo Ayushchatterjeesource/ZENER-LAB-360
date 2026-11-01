@@ -1,1 +1,321 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#101820">
+  <meta name="description" content="ZENER LAB 360 - Interactive 3D Electronics Laboratory for Zener diode experiments.">
+
+  <title>ZENER LAB 360° | Virtual Electronics Laboratory</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+
+  <header class="navbar">
+    <a href="#" class="brand">
+      <div class="brand-icon">
+        <i data-lucide="activity"></i>
+      </div>
+      <div>
+        <h2>ZENER LAB <span>360°</span></h2>
+        <small>ELECTRONICS LABORATORY</small>
+      </div>
+    </a>
+
+    <nav>
+      <a href="#home" class="active">Home</a>
+      <a href="#experiments">Experiments</a>
+      <a href="#features">Features</a>
+      <a href="#about">About</a>
+    </nav>
+
+    <button class="nav-btn" onclick="scrollToExperiments()">
+      Enter Laboratory <i data-lucide="arrow-up-right"></i>
+    </button>
+
+    <button class="menu-btn" id="menuBtn" aria-label="Open menu">
+      <i data-lucide="menu"></i>
+    </button>
+  </header>
+
+  <main>
+
+    <section class="hero" id="home">
+
+      <div class="hero-content">
+
+        <div class="status">
+          <span class="status-dot"></span>
+          INTERACTIVE VIRTUAL PRACTICAL LAB
+        </div>
+
+        <h1>
+          Experience Electronics
+          <span>Like a Real Laboratory.</span>
+        </h1>
+
+        <p>
+          Build real-world style breadboard circuits, explore
+          Zener diode characteristics and perform electronics
+          experiments inside an immersive 3D laboratory.
+        </p>
+
+        <div class="hero-actions">
+          <button class="primary-btn" onclick="scrollToExperiments()">
+            Explore Experiments
+            <i data-lucide="arrow-right"></i>
+          </button>
+
+          <a href="#features" class="secondary-btn">
+            Discover Laboratory
+          </a>
+        </div>
+
+        <div class="hero-stats">
+          <div>
+            <h3>03</h3>
+            <p>Experiments</p>
+          </div>
+          <div>
+            <h3>360°</h3>
+            <p>3D Experience</p>
+          </div>
+          <div>
+            <h3>LIVE</h3>
+            <p>Simulation</p>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="hero-visual">
+
+        <div class="lab-image">
+          <div class="image-overlay"></div>
+
+          <div class="image-label">
+            <span class="live-dot"></span>
+            VIRTUAL LABORATORY
+          </div>
+
+          <div class="image-bottom">
+            <h3>Electronics Workbench</h3>
+            <p>Realistic breadboard-based experiment environment</p>
+          </div>
+        </div>
+
+        <div class="floating-card">
+          <i data-lucide="cpu"></i>
+          <div>
+            <strong>3D Breadboard</strong>
+            <small>Interactive workspace</small>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <section class="section experiments" id="experiments">
+
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">PRACTICAL MODULES</span>
+          <h2>Choose Your Experiment</h2>
+          <p>Select an experiment to enter the virtual electronics laboratory.</p>
+        </div>
+
+        <span class="module-count">03 MODULES</span>
+      </div>
+
+      <div class="experiment-grid">
+
+        <article class="experiment-card">
+
+          <div class="card-image forward-image">
+            <span class="experiment-number">01</span>
+            <span class="experiment-tag">FORWARD BIAS</span>
+          </div>
+
+          <div class="card-content">
+            <span class="card-category">DIODE CHARACTERISTICS</span>
+
+            <h3>Forward Bias Characteristics</h3>
+
+            <p>
+              Study the forward V-I characteristics
+              of a Zener diode using a virtual breadboard.
+            </p>
+
+            <div class="component-list">
+              <span>Zener Diode</span>
+              <span>Resistor</span>
+              <span>DC Supply</span>
+            </div>
+
+            <button class="card-btn" onclick="openExperiment('forward')">
+              Open Experiment
+              <i data-lucide="arrow-up-right"></i>
+            </button>
+          </div>
+
+        </article>
+
+        <article class="experiment-card">
+
+          <div class="card-image reverse-image">
+            <span class="experiment-number">02</span>
+            <span class="experiment-tag">REVERSE BIAS</span>
+          </div>
+
+          <div class="card-content">
+            <span class="card-category">DIODE CHARACTERISTICS</span>
+
+            <h3>Reverse Bias Characteristics</h3>
+
+            <p>
+              Investigate reverse leakage current and
+              Zener breakdown characteristics.
+            </p>
+
+            <div class="component-list">
+              <span>Zener Diode</span>
+              <span>Resistor</span>
+              <span>Voltmeter</span>
+            </div>
+
+            <button class="card-btn" onclick="openExperiment('reverse')">
+              Open Experiment
+              <i data-lucide="arrow-up-right"></i>
+            </button>
+          </div>
+
+        </article>
+
+        <article class="experiment-card">
+
+          <div class="card-image load-image">
+            <span class="experiment-number">03</span>
+            <span class="experiment-tag">VOLTAGE REGULATION</span>
+          </div>
+
+          <div class="card-content">
+            <span class="card-category">REGULATION EXPERIMENT</span>
+
+            <h3>Zener Load Regulation</h3>
+
+            <p>
+              Study output voltage regulation using
+              a Zener diode and variable load.
+            </p>
+
+            <div class="component-list">
+              <span>Potentiometer</span>
+              <span>Zener Diode</span>
+              <span>DC Supply</span>
+            </div>
+
+            <button class="card-btn" onclick="openExperiment('load')">
+              Open Experiment
+              <i data-lucide="arrow-up-right"></i>
+            </button>
+          </div>
+
+        </article>
+
+      </div>
+
+    </section>
+
+    <section class="section features" id="features">
+
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">LABORATORY TECHNOLOGY</span>
+          <h2>Explore the Virtual Lab</h2>
+          <p>Everything you need for an interactive electronics practical.</p>
+        </div>
+      </div>
+
+      <div class="feature-grid">
+
+        <div class="feature-card">
+          <i data-lucide="box"></i>
+          <h3>Realistic 3D Breadboard</h3>
+          <p>Explore physical-style breadboards and electronic components.</p>
+        </div>
+
+        <div class="feature-card">
+          <i data-lucide="rotate-3d"></i>
+          <h3>360° Camera Control</h3>
+          <p>Rotate, zoom and inspect your circuit from every angle.</p>
+        </div>
+
+        <div class="feature-card">
+          <i data-lucide="activity"></i>
+          <h3>Live Simulation</h3>
+          <p>Observe voltage, current and circuit behavior.</p>
+        </div>
+
+        <div class="feature-card">
+          <i data-lucide="chart-line"></i>
+          <h3>V-I Graph Analysis</h3>
+          <p>Record readings and generate experimental graphs.</p>
+        </div>
+
+        <div class="feature-card">
+          <i data-lucide="graduation-cap"></i>
+          <h3>Virtual Viva</h3>
+          <p>Prepare for your electronics practical viva examination.</p>
+        </div>
+
+        <div class="feature-card">
+          <i data-lucide="file-text"></i>
+          <h3>Practical Reports</h3>
+          <p>Generate observation tables and experiment reports.</p>
+        </div>
+
+      </div>
+
+    </section>
+
+    <section class="cta-section" id="about">
+
+      <div>
+        <span class="eyebrow">START YOUR PRACTICAL</span>
+        <h2>Ready to Enter the Laboratory?</h2>
+        <p>Choose an experiment and start building your virtual circuit.</p>
+      </div>
+
+      <button class="primary-btn" onclick="scrollToExperiments()">
+        Start Experiment <i data-lucide="arrow-right"></i>
+      </button>
+
+    </section>
+
+  </main>
+
+  <footer>
+    <div class="footer-brand">
+      <strong>ZENER LAB 360°</strong>
+      <p>Interactive Electronics Practical Laboratory</p>
+    </div>
+
+    <p>Made by Ayush Chatterjee</p>
+    <p>© 2026. All rights reserved.</p>
+  </footer>
+
+  <script src="script.js"></script>
+
+</body>
+</html>
+
