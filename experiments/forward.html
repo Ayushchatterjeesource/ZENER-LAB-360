@@ -7,19 +7,242 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <meta name="description"
-        content="Interactive 3D virtual laboratory for studying the forward bias V-I characteristics of a Zener diode.">
+        content="Interactive Zener diode forward bias virtual electrical engineering laboratory.">
 
-    <meta name="theme-color" content="#101a2a">
+    <meta name="theme-color" content="#101827">
 
-    <title>Forward Bias | ZENER-LAB-360</title>
+    <title>Forward Bias Experiment | ZENER-LAB-360</title>
 
-    <!-- Main laboratory styles -->
     <link rel="stylesheet" href="../css/laboratory.css">
-
-    <!-- Responsive styles -->
     <link rel="stylesheet" href="../css/responsive.css">
 
-    <!-- Three.js import map -->
+    <style>
+        .experiment-page {
+            max-width: 1500px;
+            margin: auto;
+            padding: 24px;
+        }
+
+        .experiment-header {
+            margin-bottom: 24px;
+        }
+
+        .experiment-header h1 {
+            color: #e2e8f0;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .experiment-header p {
+            color: #94a3b8;
+        }
+
+        .lab-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.8fr);
+            gap: 22px;
+        }
+
+        .lab-panel {
+            background: #172438;
+            border: 1px solid #334155;
+            border-radius: 14px;
+            padding: 18px;
+            margin-bottom: 20px;
+        }
+
+        .lab-panel h2 {
+            color: #e2e8f0;
+            font-size: 19px;
+            margin-bottom: 16px;
+        }
+
+        #three-container {
+            width: 100%;
+            height: 520px;
+            position: relative;
+            overflow: hidden;
+            border-radius: 12px;
+            background: #101827;
+        }
+
+        #three-container canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .circuit-tools {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .circuit-tools button,
+        .circuit-tools select {
+            padding: 10px 14px;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            background: #26374e;
+            color: #f8fafc;
+            cursor: pointer;
+        }
+
+        .circuit-tools button:hover {
+            background: #0e7490;
+        }
+
+        #circuitStatus {
+            color: #67e8f9;
+            background: #102a3b;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 12px;
+            font-size: 13px;
+        }
+
+        .voltage-control {
+            margin: 16px 0;
+        }
+
+        .voltage-control input {
+            width: 100%;
+            accent-color: #22d3ee;
+        }
+
+        .voltage-value {
+            color: #67e8f9;
+            font-size: 23px;
+            font-weight: bold;
+        }
+
+        .action-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .action-buttons button {
+            padding: 11px 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            color: white;
+            background: #0891b2;
+        }
+
+        .action-buttons button.reset {
+            background: #475569;
+        }
+
+        .meter-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .meter-card {
+            background: #0f1b2d;
+            padding: 16px;
+            border: 1px solid #334155;
+            border-radius: 10px;
+        }
+
+        .meter-card span {
+            display: block;
+            color: #94a3b8;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .meter-card strong {
+            color: #67e8f9;
+            font-size: 22px;
+        }
+
+        .graph-container {
+            width: 100%;
+            overflow: hidden;
+        }
+
+        #viGraph {
+            display: block;
+            width: 100%;
+            max-width: 100%;
+            height: 300px;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            color: #e2e8f0;
+            min-width: 550px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            text-align: center;
+            border-bottom: 1px solid #334155;
+        }
+
+        th {
+            color: #67e8f9;
+            background: #102a3b;
+        }
+
+        .experiment-note {
+            color: #94a3b8;
+            font-size: 13px;
+            line-height: 1.7;
+            margin-top: 12px;
+        }
+
+        .site-footer {
+            text-align: center;
+            padding: 25px;
+            color: #94a3b8;
+            border-top: 1px solid #334155;
+            margin-top: 30px;
+        }
+
+        @media(max-width: 900px) {
+            .lab-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media(max-width: 600px) {
+            .experiment-page {
+                padding: 12px;
+            }
+
+            #three-container {
+                height: 350px;
+            }
+
+            .meter-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .meter-card strong {
+                font-size: 17px;
+            }
+
+            .experiment-header h1 {
+                font-size: 22px;
+            }
+        }
+    </style>
+
+    <!-- Three.js -->
     <script type="importmap">
     {
         "imports": {
@@ -33,535 +256,359 @@
 
 <body>
 
-    <!-- =====================================
-         LOADING SCREEN
-    ====================================== -->
+    <main class="experiment-page">
 
-    <div id="loadingScreen" class="loading-screen">
+        <!-- HEADER -->
 
-        <div class="loader-content">
+        <header class="experiment-header">
 
-            <div class="loader-spinner"></div>
+            <h1>Forward Bias Characteristics</h1>
 
-            <h2>ZENER-LAB-360</h2>
+            <p>
+                Zener Diode V-I Characteristics
+                | Virtual Electrical Engineering Laboratory
+            </p>
 
-            <p>Preparing your virtual laboratory...</p>
+        </header>
 
-        </div>
 
-    </div>
+        <!-- MAIN LAB LAYOUT -->
 
+        <div class="lab-layout">
 
-    <!-- =====================================
-         HEADER
-    ====================================== -->
+            <!-- LEFT COLUMN -->
 
-    <header class="lab-header">
+            <section>
 
-        <div class="lab-brand">
+                <!-- 3D LABORATORY -->
 
-            <a href="../index.html" class="brand-link">
+                <div class="lab-panel">
 
-                <div class="brand-logo">Z</div>
+                    <h2>360° Interactive Laboratory</h2>
 
-                <div class="brand-text">
+                    <div id="three-container">
 
-                    <h1>ZENER-LAB-360</h1>
+                        <div id="loadingScreen">
+                            Loading Virtual Laboratory...
+                        </div>
 
-                    <span>Interactive Virtual Electronics Lab</span>
+                    </div>
 
-                </div>
 
-            </a>
+                    <!-- CIRCUIT TOOLS -->
 
-        </div>
+                    <h2 style="margin-top:20px;">
+                        Circuit Builder Tools
+                    </h2>
 
+                    <div class="circuit-tools">
 
-        <nav class="lab-navigation">
+                        <button
+                            id="wireModeBtn"
+                            type="button">
+                            Connect Wire
+                        </button>
 
-            <a href="../index.html">Home</a>
+                        <select
+                            id="wireColor"
+                            aria-label="Select wire colour">
 
-            <a href="forward.html" class="active">
-                Forward Bias
-            </a>
+                            <option value="red">
+                                Red (+)
+                            </option>
 
-            <a href="reverse.html">
-                Reverse Bias
-            </a>
+                            <option value="black">
+                                Black (-)
+                            </option>
 
-            <a href="load-regulation.html">
-                Load Regulation
-            </a>
+                            <option value="yellow">
+                                Yellow
+                            </option>
 
-        </nav>
+                            <option value="green">
+                                Green
+                            </option>
 
+                        </select>
 
-        <div class="header-status">
+                        <button
+                            id="deleteWireBtn"
+                            type="button">
+                            Delete Last Wire
+                        </button>
 
-            <span class="status-dot"></span>
+                        <button
+                            id="resetCameraBtn"
+                            type="button">
+                            Reset Camera
+                        </button>
 
-            <span>Virtual Lab</span>
+                    </div>
 
-        </div>
 
-    </header>
+                    <p
+                        id="circuitStatus"
+                        aria-live="polite">
 
+                        Select Connect Wire to begin.
 
-    <!-- =====================================
-         MAIN CONTENT
-    ====================================== -->
+                    </p>
 
-    <main class="laboratory-main">
+                    <p
+                        id="selectedComponent"
+                        aria-live="polite">
+                    </p>
 
 
-        <!-- =====================================
-             PAGE TITLE
-        ====================================== -->
-
-        <section class="experiment-heading">
-
-            <div class="heading-content">
-
-                <span class="section-label">
-                    EXPERIMENT 01
-                </span>
-
-                <h2 id="experimentTitle">
-                    Forward Bias Characteristics
-                </h2>
-
-                <p>
-                    Study of V-I characteristics of a Zener diode
-                    under forward bias condition.
-                </p>
-
-            </div>
-
-
-            <div class="experiment-badge">
-
-                <span class="status-dot"></span>
-
-                <span>Experiment Mode: Forward Bias</span>
-
-            </div>
-
-        </section>
-
-
-
-        <!-- =====================================
-             EXPERIMENT INFORMATION
-        ====================================== -->
-
-        <section class="experiment-info-grid">
-
-            <div class="info-card">
-
-                <span class="info-icon">⚡</span>
-
-                <div>
-
-                    <h3>Experiment</h3>
-
-                    <p>Forward Bias</p>
-
-                </div>
-
-            </div>
-
-
-            <div class="info-card">
-
-                <span class="info-icon">🔌</span>
-
-                <div>
-
-                    <h3>Diode Type</h3>
-
-                    <p>Zener Diode</p>
-
-                </div>
-
-            </div>
-
-
-            <div class="info-card">
-
-                <span class="info-icon">📊</span>
-
-                <div>
-
-                    <h3>Measurement</h3>
-
-                    <p>V-I Characteristics</p>
-
-                </div>
-
-            </div>
-
-
-            <div class="info-card">
-
-                <span class="info-icon">🧪</span>
-
-                <div>
-
-                    <h3>Laboratory</h3>
-
-                    <p>Virtual Simulation</p>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-
-        <!-- =====================================
-             3D LABORATORY
-        ====================================== -->
-
-        <section class="laboratory-section">
-
-            <div class="section-heading">
-
-                <div>
-
-                    <span class="section-label">
-                        INTERACTIVE ENVIRONMENT
-                    </span>
-
-                    <h2>3D Virtual Laboratory</h2>
-
-                    <p>
-                        Rotate, zoom and explore the laboratory
-                        equipment from different angles.
+                    <p class="experiment-note">
+                        Use your mouse to rotate and zoom the laboratory.
+                        Select Connect Wire, then select two breadboard
+                        holes to draw a jumper wire.
                     </p>
 
                 </div>
 
-                <span class="live-indicator">
-                    <span class="status-dot"></span>
-                    3D VIEW
-                </span>
 
-            </div>
+                <!-- GRAPH -->
 
+                <div class="lab-panel">
 
-            <div class="laboratory-layout">
+                    <h2>V-I Characteristics Graph</h2>
 
+                    <div class="graph-container">
 
-                <!-- 3D VIEWPORT -->
-
-                <div class="lab-view-card">
-
-                    <div class="viewport-toolbar">
-
-                        <div class="viewport-title">
-
-                            <span class="toolbar-icon">◉</span>
-
-                            <span>Laboratory Workspace</span>
-
-                        </div>
-
-
-                        <div class="viewport-actions">
-
-                            <button
-                                id="rotateBtn"
-                                class="icon-button"
-                                type="button"
-                                title="Rotate camera">
-
-                                ↻
-
-                            </button>
-
-
-                            <button
-                                id="zoomInBtn"
-                                class="icon-button"
-                                type="button"
-                                title="Zoom in">
-
-                                +
-
-                            </button>
-
-
-                            <button
-                                id="zoomOutBtn"
-                                class="icon-button"
-                                type="button"
-                                title="Zoom out">
-
-                                −
-
-                            </button>
-
-
-                            <button
-                                id="showHolesBtn"
-                                class="icon-button"
-                                type="button"
-                                title="Show breadboard holes">
-
-                                ⊞
-
-                            </button>
-
-                        </div>
-
-                    </div>
-
-
-                    <!-- THREE.JS CONTAINER -->
-
-                    <div
-                        id="three-container"
-                        class="three-viewport">
-
-                        <div class="viewport-hint">
-
-                            <span>🖱️</span>
-
-                            <p>
-                                Drag to rotate · Scroll to zoom
-                            </p>
-
-                        </div>
-
-                    </div>
-
-
-                    <div class="viewport-footer">
-
-                        <span>Interactive 3D Scene</span>
-
-                        <span>
-                            Select a component to view information
-                        </span>
+                        <canvas
+                            id="viGraph"
+                            width="800"
+                            height="350">
+                        </canvas>
 
                     </div>
 
                 </div>
 
+
+                <!-- OBSERVATION TABLE -->
+
+                <div class="lab-panel">
+
+                    <h2>Observation Table</h2>
+
+                    <div class="table-wrapper">
+
+                        <table>
+
+                            <thead>
+
+                                <tr>
+                                    <th>Sl. No.</th>
+                                    <th>Input Voltage</th>
+                                    <th>Diode Voltage</th>
+                                    <th>Current</th>
+                                    <th>Power</th>
+                                    <th>Region</th>
+                                </tr>
+
+                            </thead>
+
+                            <tbody id="observationBody">
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                    <button
+                        id="recordBtn"
+                        type="button"
+                        style="margin-top:15px;">
+
+                        Record Observation
+
+                    </button>
+
+                </div>
+
+            </section>
+
+
+            <!-- RIGHT COLUMN -->
+
+            <aside>
+
+                <!-- EXPERIMENT CONTROLS -->
+
+                <div class="lab-panel">
+
+                    <h2>Experiment Controls</h2>
+
+                    <div class="voltage-control">
+
+                        <label for="voltageSlider">
+                            Input DC Voltage
+                        </label>
+
+                        <p
+                            id="voltageValue"
+                            class="voltage-value">
+
+                            0.0 V
+
+                        </p>
+
+                        <input
+                            type="range"
+                            id="voltageSlider"
+                            min="0"
+                            max="12"
+                            step="0.1"
+                            value="0">
+
+                    </div>
+
+
+                    <div class="action-buttons">
+
+                        <button
+                            id="runBtn"
+                            type="button">
+
+                            Run Simulation
+
+                        </button>
+
+                        <button
+                            id="resetBtn"
+                            class="reset"
+                            type="button">
+
+                            Reset Experiment
+
+                        </button>
+
+                    </div>
+
+                </div>
+
+
+                <!-- DIGITAL METERS -->
+
+                <div class="lab-panel">
+
+                    <h2>Digital Measurements</h2>
+
+                    <div class="meter-grid">
+
+                        <div class="meter-card">
+
+                            <span>Diode Voltage</span>
+
+                            <strong id="voltageReading">
+                                0.000 V
+                            </strong>
+
+                        </div>
+
+                        <div class="meter-card">
+
+                            <span>Diode Current</span>
+
+                            <strong id="currentReading">
+                                0.000 mA
+                            </strong>
+
+                        </div>
+
+                        <div class="meter-card">
+
+                            <span>Power</span>
+
+                            <strong id="powerReading">
+                                0.000 mW
+                            </strong>
+
+                        </div>
+
+                        <div class="meter-card">
+
+                            <span>Operating Region</span>
+
+                            <strong
+                                id="operatingRegion"
+                                style="font-size:15px;">
+
+                                Standby
+
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+                </div>
 
 
                 <!-- COMPONENT INFORMATION -->
 
-                <aside class="component-panel">
+                <div class="lab-panel">
 
-                    <div class="panel-heading">
+                    <h2>Required Apparatus</h2>
 
-                        <h3>Component Information</h3>
+                    <ul style="color:#cbd5e1;line-height:2;">
 
-                        <span class="panel-icon">ⓘ</span>
+                        <li>Breadboard</li>
+                        <li>Zener Diode</li>
+                        <li>Series Resistor</li>
+                        <li>DC Power Supply</li>
+                        <li>Ammeter</li>
+                        <li>Voltmeter</li>
+                        <li>Connecting Wires</li>
 
-                    </div>
+                    </ul>
 
-
-                    <div id="componentInfo" class="component-info">
-
-                        <div class="component-placeholder">
-
-                            <div class="placeholder-icon">🔬</div>
-
-                            <h4>Explore Components</h4>
-
-                            <p>
-                                Select a component in the 3D laboratory
-                                to view its information.
-                            </p>
-
-                        </div>
-
-                    </div>
+                </div>
 
 
-                    <div class="component-list">
+                <!-- THEORY -->
 
-                        <h4>Equipment Used</h4>
+                <div class="lab-panel">
 
-                        <ul>
+                    <h2>Experiment Objective</h2>
 
-                            <li>
-                                <span class="equipment-dot"></span>
-                                Breadboard
-                            </li>
+                    <p class="experiment-note">
 
-                            <li>
-                                <span class="equipment-dot"></span>
-                                Zener Diode
-                            </li>
+                        To study the forward bias V-I characteristics
+                        of a Zener diode and understand the relationship
+                        between applied voltage and diode current.
 
-                            <li>
-                                <span class="equipment-dot"></span>
-                                Series Resistor
-                            </li>
+                    </p>
 
-                            <li>
-                                <span class="equipment-dot"></span>
-                                Potentiometer
-                            </li>
+                    <p class="experiment-note">
 
-                            <li>
-                                <span class="equipment-dot"></span>
-                                DC Power Supply
-                            </li>
+                        In forward bias, the P-side is connected to
+                        the positive terminal and the N-side is connected
+                        to the negative terminal.
 
-                            <li>
-                                <span class="equipment-dot"></span>
-                                Ammeter
-                            </li>
-
-                            <li>
-                                <span class="equipment-dot"></span>
-                                Voltmeter
-                            </li>
-
-                            <li>
-                                <span class="equipment-dot"></span>
-                                Connecting Wires
-                            </li>
-
-                        </ul>
-
-                    </div>
-
-                </aside>
-
-            </div>
-
-        </section>
-
-
-
-        <!-- =====================================
-             CIRCUIT INFORMATION
-        ====================================== -->
-
-        <section class="circuit-section">
-
-            <div class="section-heading">
-
-                <div>
-
-                    <span class="section-label">
-                        CIRCUIT CONFIGURATION
-                    </span>
-
-                    <h2>Forward Bias Circuit</h2>
-
-                    <p>
-                        In forward bias, the anode is connected
-                        towards the positive supply and the cathode
-                        towards the negative side through the
-                        measurement circuit.
                     </p>
 
                 </div>
 
-            </div>
+            </aside>
+
+        </div>
 
 
-            <div class="circuit-information-card">
+        <!-- VIVA -->
 
-                <div class="circuit-note">
+        <section class="lab-panel">
 
-                    <span class="note-icon">ℹ️</span>
+            <h2>Viva Voce</h2>
 
-                    <div>
+            <div id="vivaContainer">
 
-                        <h3>Forward Bias Connection</h3>
-
-                        <p>
-                            The Zener diode is connected in forward
-                            bias to study its forward V-I behaviour.
-                            The ammeter measures current in series
-                            and the voltmeter measures the voltage
-                            across the diode.
-                        </p>
-
-                    </div>
-
-                </div>
-
-
-                <div class="circuit-polarity">
-
-                    <div class="polarity-item">
-
-                        <span class="polarity-symbol positive">
-                            +
-                        </span>
-
-                        <span>Positive Supply</span>
-
-                    </div>
-
-
-                    <div class="polarity-arrow">
-                        →
-                    </div>
-
-
-                    <div class="polarity-item">
-
-                        <span class="polarity-symbol">
-
-                            A
-
-                        </span>
-
-                        <span>Ammeter</span>
-
-                    </div>
-
-
-                    <div class="polarity-arrow">
-                        →
-                    </div>
-
-
-                    <div class="polarity-item">
-
-                        <span class="polarity-symbol">
-
-                            D
-
-                        </span>
-
-                        <span>Zener Diode</span>
-
-                    </div>
-
-
-                    <div class="polarity-arrow">
-                        →
-                    </div>
-
-
-                    <div class="polarity-item">
-
-                        <span class="polarity-symbol negative">
-                            −
-                        </span>
-
-                        <span>Negative Supply</span>
-
-                    </div>
-
-                </div>
-
-                <p class="safety-note">
-                    Use a low-voltage, current-limited DC supply
-                    for this educational simulation. Follow your
-                    laboratory instructor's instructions for
-                    physical experiments.
+                <p class="experiment-note">
+                    Loading viva questions...
                 </p>
 
             </div>
@@ -569,707 +616,24 @@
         </section>
 
 
+        <!-- FOOTER -->
 
-        <!-- =====================================
-             SIMULATION CONTROLS
-        ====================================== -->
+        <footer class="site-footer">
 
-        <section class="simulation-section">
+            <p>
+                This website is made by Ayush Chatterjee
+            </p>
 
-            <div class="section-heading">
+            <p>
+                © 2026. All rights reserved.
+            </p>
 
-                <div>
-
-                    <span class="section-label">
-                        LIVE SIMULATION
-                    </span>
-
-                    <h2>Voltage Control Panel</h2>
-
-                    <p>
-                        Adjust the simulated supply voltage and
-                        observe the corresponding diode readings.
-                    </p>
-
-                </div>
-
-                <span class="simulation-status">
-                    <span class="status-dot"></span>
-                    READY
-                </span>
-
-            </div>
-
-
-            <div class="simulation-grid">
-
-
-                <!-- VOLTAGE CONTROL -->
-
-                <div class="control-card">
-
-                    <div class="card-heading">
-
-                        <h3>DC Supply Voltage</h3>
-
-                        <span class="control-icon">⚡</span>
-
-                    </div>
-
-
-                    <div class="voltage-display">
-
-                        <span id="voltageValue">
-                            0.0 V
-                        </span>
-
-                    </div>
-
-
-                    <label for="voltageSlider">
-                        Adjust Input Voltage
-                    </label>
-
-
-                    <input
-                        type="range"
-                        id="voltageSlider"
-                        min="0"
-                        max="12"
-                        step="0.1"
-                        value="0"
-                    >
-
-
-                    <div class="range-labels">
-
-                        <span>0 V</span>
-
-                        <span>6 V</span>
-
-                        <span>12 V</span>
-
-                    </div>
-
-
-                    <div class="control-buttons">
-
-                        <button
-                            id="runBtn"
-                            class="primary-button"
-                            type="button">
-
-                            ▶ Run Simulation
-
-                        </button>
-
-
-                        <button
-                            id="resetBtn"
-                            class="secondary-button"
-                            type="button">
-
-                            ↻ Reset
-
-                        </button>
-
-                    </div>
-
-                </div>
-
-
-
-                <!-- RESISTANCE CONTROL -->
-
-                <div class="control-card">
-
-                    <div class="card-heading">
-
-                        <h3>Series Resistance</h3>
-
-                        <span class="control-icon">Ω</span>
-
-                    </div>
-
-
-                    <div class="resistance-display">
-
-                        <span id="resistanceDisplay">
-                            1000 Ω
-                        </span>
-
-                    </div>
-
-
-                    <label for="seriesResistance">
-                        Adjust Series Resistance
-                    </label>
-
-
-                    <input
-                        type="range"
-                        id="seriesResistance"
-                        min="470"
-                        max="2200"
-                        step="10"
-                        value="1000"
-                    >
-
-
-                    <div class="range-labels">
-
-                        <span>470 Ω</span>
-
-                        <span>1.3 kΩ</span>
-
-                        <span>2.2 kΩ</span>
-
-                    </div>
-
-
-                    <p class="control-description">
-                        Series resistance limits the current
-                        in the simulated circuit.
-                    </p>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-
-        <!-- =====================================
-             DIGITAL METERS
-        ====================================== -->
-
-        <section class="meter-section">
-
-            <div class="section-heading">
-
-                <div>
-
-                    <span class="section-label">
-                        MEASUREMENT INSTRUMENTS
-                    </span>
-
-                    <h2>Digital Meter Readings</h2>
-
-                    <p>
-                        Observe the simulated electrical
-                        measurements in real time.
-                    </p>
-
-                </div>
-
-            </div>
-
-
-            <div class="meter-grid">
-
-
-                <!-- AMMETER -->
-
-                <div class="meter-card">
-
-                    <div class="meter-top">
-
-                        <span class="meter-name">
-                            AMMETER
-                        </span>
-
-                        <span class="meter-symbol">
-                            A
-                        </span>
-
-                    </div>
-
-
-                    <div class="meter-screen">
-
-                        <span id="currentReading">
-                            0.000 mA
-                        </span>
-
-                    </div>
-
-
-                    <p>Diode Current</p>
-
-                </div>
-
-
-
-                <!-- VOLTMETER -->
-
-                <div class="meter-card">
-
-                    <div class="meter-top">
-
-                        <span class="meter-name">
-                            VOLTMETER
-                        </span>
-
-                        <span class="meter-symbol">
-                            V
-                        </span>
-
-                    </div>
-
-
-                    <div class="meter-screen">
-
-                        <span id="voltageReading">
-                            0.000 V
-                        </span>
-
-                    </div>
-
-
-                    <p>Diode Voltage</p>
-
-                </div>
-
-
-
-                <!-- POWER -->
-
-                <div class="meter-card">
-
-                    <div class="meter-top">
-
-                        <span class="meter-name">
-                            POWER
-                        </span>
-
-                        <span class="meter-symbol">
-                            P
-                        </span>
-
-                    </div>
-
-
-                    <div class="meter-screen">
-
-                        <span id="powerReading">
-                            0.000 mW
-                        </span>
-
-                    </div>
-
-
-                    <p>Calculated Power</p>
-
-                </div>
-
-
-
-                <!-- OPERATING REGION -->
-
-                <div class="meter-card">
-
-                    <div class="meter-top">
-
-                        <span class="meter-name">
-                            OPERATING REGION
-                        </span>
-
-                        <span class="meter-symbol">
-                            ●
-                        </span>
-
-                    </div>
-
-
-                    <div class="meter-screen">
-
-                        <span id="operatingRegion">
-                            OFF
-                        </span>
-
-                    </div>
-
-
-                    <p>Simulation Status</p>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-
-        <!-- =====================================
-             GRAPH SECTION
-        ====================================== -->
-
-        <section class="graph-section">
-
-            <div class="section-heading">
-
-                <div>
-
-                    <span class="section-label">
-                        GRAPHICAL ANALYSIS
-                    </span>
-
-                    <h2>V-I Characteristics Graph</h2>
-
-                    <p>
-                        Visual representation of diode voltage
-                        versus diode current.
-                    </p>
-
-                </div>
-
-
-                <button
-                    id="generateGraphBtn"
-                    class="primary-button"
-                    type="button">
-
-                    Generate Graph
-
-                </button>
-
-            </div>
-
-
-            <div class="graph-card">
-
-                <div class="graph-header">
-
-                    <div>
-
-                        <h3>Forward Bias V-I Curve</h3>
-
-                        <p>Voltage vs Current</p>
-
-                    </div>
-
-
-                    <span class="graph-indicator">
-                        LIVE DATA
-                    </span>
-
-                </div>
-
-
-                <div class="graph-container">
-
-                    <canvas
-                        id="viGraph"
-                        aria-label="Forward bias V-I characteristics graph"
-                        role="img">
-                    </canvas>
-
-                </div>
-
-
-                <div class="graph-legend">
-
-                    <span class="legend-item">
-
-                        <span class="legend-dot"></span>
-
-                        Forward Bias Curve
-
-                    </span>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-
-        <!-- =====================================
-             OBSERVATION TABLE
-        ====================================== -->
-
-        <section class="observation-section">
-
-            <div class="section-heading">
-
-                <div>
-
-                    <span class="section-label">
-                        EXPERIMENTAL DATA
-                    </span>
-
-                    <h2>Observation Table</h2>
-
-                    <p>
-                        Record your voltage and current
-                        readings during the experiment.
-                    </p>
-
-                </div>
-
-
-                <button
-                    id="recordBtn"
-                    class="primary-button"
-                    type="button">
-
-                    + Record Reading
-
-                </button>
-
-            </div>
-
-
-            <div class="table-card">
-
-                <div class="table-responsive">
-
-                    <table id="observationTable">
-
-                        <thead>
-
-                            <tr>
-
-                                <th>Sl. No.</th>
-
-                                <th>Diode Voltage (V)</th>
-
-                                <th>Diode Current (mA)</th>
-
-                                <th>Operating Region</th>
-
-                            </tr>
-
-                        </thead>
-
-
-                        <tbody id="observationBody">
-
-                            <tr class="empty-row">
-
-                                <td colspan="4">
-
-                                    No observations recorded yet.
-
-                                </td>
-
-                            </tr>
-
-                        </tbody>
-
-                    </table>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-
-        <!-- =====================================
-             THEORY SECTION
-        ====================================== -->
-
-        <section class="theory-section">
-
-            <div class="section-heading">
-
-                <div>
-
-                    <span class="section-label">
-                        EXPERIMENT THEORY
-                    </span>
-
-                    <h2>Understanding Forward Bias</h2>
-
-                </div>
-
-            </div>
-
-
-            <div class="theory-card">
-
-                <h3>What is Forward Bias?</h3>
-
-                <p>
-                    A diode is said to be forward biased when its
-                    anode is connected to the positive terminal
-                    and its cathode is connected towards the
-                    negative terminal of the DC supply.
-                </p>
-
-
-                <h3>Working Principle</h3>
-
-                <p>
-                    When the forward voltage increases, the
-                    potential barrier of the diode decreases.
-                    After the knee region, the diode current
-                    increases rapidly.
-                </p>
-
-
-                <h3>Important Observation</h3>
-
-                <p>
-                    A silicon diode typically has a forward
-                    voltage around 0.7 V under common operating
-                    conditions. The exact value depends on
-                    current and temperature.
-                </p>
-
-
-                <div class="formula-card">
-
-                    <span>Ohm's Law</span>
-
-                    <strong>
-                        I = V / R
-                    </strong>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-
-        <!-- =====================================
-             VIVA SECTION
-        ====================================== -->
-
-        <section class="viva-section">
-
-            <div class="section-heading">
-
-                <div>
-
-                    <span class="section-label">
-                        KNOWLEDGE CHECK
-                    </span>
-
-                    <h2>Experiment Viva Questions</h2>
-
-                    <p>
-                        Practice important questions related
-                        to Zener diode forward bias.
-                    </p>
-
-                </div>
-
-            </div>
-
-
-            <div
-                id="vivaContainer"
-                class="viva-container">
-
-                <div class="viva-placeholder">
-
-                    <p>
-                        Loading viva questions...
-                    </p>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-
-        <!-- =====================================
-             SAFETY NOTE
-        ====================================== -->
-
-        <section class="safety-section">
-
-            <div class="safety-icon">
-                ⚠️
-            </div>
-
-            <div>
-
-                <h3>Laboratory Safety</h3>
-
-                <p>
-                    This website provides an educational
-                    simulation. For physical laboratory work,
-                    use the prescribed low-voltage equipment,
-                    suitable current limiting and instructor
-                    supervision. Check component polarity
-                    before making connections.
-                </p>
-
-            </div>
-
-        </section>
-
+        </footer>
 
     </main>
 
 
-
-    <!-- =====================================
-         FOOTER
-    ====================================== -->
-
-    <footer class="lab-footer">
-
-        <div class="footer-content">
-
-            <div class="footer-brand">
-
-                <h3>ZENER-LAB-360</h3>
-
-                <p>
-                    Explore Electronics Through Interactive
-                    Virtual Experiments.
-                </p>
-
-            </div>
-
-
-            <div class="footer-links">
-
-                <a href="../index.html">Home</a>
-
-                <a href="forward.html">Forward Bias</a>
-
-                <a href="reverse.html">Reverse Bias</a>
-
-                <a href="load-regulation.html">
-                    Load Regulation
-                </a>
-
-            </div>
-
-        </div>
-
-
-        <div class="footer-bottom">
-
-            <p>
-                This website is made by Ayush Chatterjee.
-            </p>
-
-            <p>
-                © 2026 ZENER-LAB-360. All rights reserved.
-            </p>
-
-        </div>
-
-    </footer>
-
-
-
-    <!-- =====================================
-         LABORATORY JAVASCRIPT
-    ====================================== -->
+    <!-- LABORATORY JAVASCRIPT -->
 
     <script type="module" src="../js/laboratory.js"></script>
 
