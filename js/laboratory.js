@@ -1,1095 +1,1697 @@
 
-import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+/* =========================================
+   ZENER-LAB-360
+   FILE: laboratory.js
 
-const container = document.getElementById("three-container");
-const loadingScreen = document.getElementById("loadingScreen");
+   Main Laboratory Controller
+========================================= */
 
-if (!container) {
-  throw new Error("3D laboratory container not found.");
-}
+import * as THREE from
+    'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
 
-// -------------------------------------
-// SCENE SETUP
-// -------------------------------------
+import { OrbitControls } from
+    'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/controls/OrbitControls.js';
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color("#c4cccf");
+import {
+    createBreadboard
+} from './components.js';
 
-const camera = new THREE.PerspectiveCamera(
-  42,
-  container.clientWidth / container.clientHeight,
-  0.1,
-  100
-);
+import {
+    createComponent
+} from './components.js';
 
-camera.position.set(8, 8, 10);
+import {
+    createHoleMarkers
+} from './breadboard.js';
 
-const renderer = new THREE.WebGLRenderer({
-  antialias: true,
-  powerPreference: "high-performance"
-});
+import {
+    CircuitBuilder
+} from './circuit-builder.js';
 
-renderer.setSize(container.clientWidth, container.clientHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+import {
+    ZenerSimulation
+} from './simulation.js';
 
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+import {
+    ExperimentGraph
+} from './graph.js';
 
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+import {
+    VivaModule
+} from './viva.js';
 
-container.appendChild(renderer.domElement);
 
-// -------------------------------------
-// CAMERA CONTROLS
-// -------------------------------------
+/* =========================================
+   1. LABORATORY CONTROLLER
+========================================= */
 
-const controls = new OrbitControls(camera, renderer.domElement);
+class ZenerLaboratory {
 
-controls.enableDamping = true;
-controls.dampingFactor = 0.06;
+    constructor() {
 
-controls.enablePan = true;
-controls.minDistance = 5;
-controls.maxDistance = 19;
+        this.container =
+            document.getElementById('three-container');
 
-controls.maxPolarAngle = Math.PI / 2.05;
-controls.target.set(0, 0.4, 0);
+        if (!this.container) {
+            console.error(
+                '3D viewport #three-container not found.'
+            );
 
-// -------------------------------------
-// LIGHTING
-// -------------------------------------
+            return;
+        }
 
-const ambientLight = new THREE.AmbientLight(
-  0xffffff,
-  1.7
-);
+        this.scene = null;
+        this.camera = null;
+        this.renderer = null;
+        this.controls = null;
 
-scene.add(ambientLight);
+        this.circuitBuilder = null;
+        this.simulation = null;
+        this.graph = null;
+        this.viva = null;
 
-const mainLight = new THREE.DirectionalLight(
-  0xffffff,
-  3
-);
+        this.components = {};
 
-mainLight.position.set(-5, 12, 7);
-mainLight.castShadow = true;
+        this.observations = [];
 
-mainLight.shadow.mapSize.set(2048, 2048);
+        this.mode = this.detectExperimentMode();
 
-scene.add(mainLight);
+        this.isRunning = false;
 
-const fillLight = new THREE.DirectionalLight(
-  0xd7edff,
-  1.2
-);
+        this.animationFrame = null;
 
-fillLight.position.set(7, 6, -5);
-scene.add(fillLight);
+        this.raycaster = new THREE.Raycaster();
 
-// -------------------------------------
-// MATERIALS
-// -------------------------------------
+        this.pointer = new THREE.Vector2();
 
-const materials = {
-  table: new THREE.MeshStandardMaterial({
-    color: "#777b79",
-    roughness: 0.8
-  }),
+        this.selectedObject = null;
 
-  breadboard: new THREE.MeshStandardMaterial({
-    color: "#f0f0e9",
-    roughness: 0.72
-  }),
+        this.clock = new THREE.Clock();
 
-  hole: new THREE.MeshStandardMaterial({
-    color: "#303b40",
-    roughness: 0.9
-  }),
-
-  metal: new THREE.MeshStandardMaterial({
-    color: "#b6c1c7",
-    metalness: 0.8,
-    roughness: 0.3
-  }),
-
-  plastic: new THREE.MeshStandardMaterial({
-    color: "#20272c",
-    roughness: 0.55
-  }),
-
-  red: new THREE.MeshStandardMaterial({
-    color: "#e34343",
-    roughness: 0.4
-  }),
-
-  blue: new THREE.MeshStandardMaterial({
-    color: "#277ac8",
-    roughness: 0.4
-  }),
-
-  resistor: new THREE.MeshStandardMaterial({
-    color: "#c89b63",
-    roughness: 0.65
-  }),
-
-  diode: new THREE.MeshStandardMaterial({
-    color: "#292e32",
-    roughness: 0.4
-  })
-};
-
-// -------------------------------------
-// HELPER FUNCTIONS
-// -------------------------------------
-
-function addBox(parent, size, position, material) {
-
-  const geometry = new THREE.BoxGeometry(
-    size[0],
-    size[1],
-    size[2]
-  );
-
-  const mesh = new THREE.Mesh(geometry, material);
-
-  mesh.position.set(...position);
-
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-
-  parent.add(mesh);
-
-  return mesh;
-}
-
-function addCylinder(parent, radius, length, position, material, rotation) {
-
-  const geometry = new THREE.CylinderGeometry(
-    radius,
-    radius,
-    length,
-    32
-  );
-
-  const mesh = new THREE.Mesh(geometry, material);
-
-  mesh.position.set(...position);
-
-  if (rotation) {
-    mesh.rotation.set(...rotation);
-  }
-
-  mesh.castShadow = true;
-
-  parent.add(mesh);
-
-  return mesh;
-}
-
-function addText(parent, text, position, size = 0.16, color = "#27333a") {
-
-  const canvas = document.createElement("canvas");
-
-  canvas.width = 512;
-  canvas.height = 128;
-
-  const ctx = canvas.getContext("2d");
-
-  ctx.clearRect(0, 0, 512, 128);
-
-  ctx.fillStyle = color;
-  ctx.font = "bold 48px Arial";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-
-  ctx.fillText(text, 256, 64);
-
-  const texture = new THREE.CanvasTexture(canvas);
-
-  const material = new THREE.MeshBasicMaterial({
-    map: texture,
-    transparent: true,
-    side: THREE.DoubleSide
-  });
-
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(size * 4, size),
-    material
-  );
-
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.position.set(...position);
-
-  parent.add(mesh);
-
-  return mesh;
-}
-
-// -------------------------------------
-// WORKBENCH
-// -------------------------------------
-
-const workbench = addBox(
-  scene,
-  [18, 0.45, 12],
-  [0, -0.25, 0],
-  materials.table
-);
-
-const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(200, 200),
-  new THREE.MeshStandardMaterial({
-    color: "#d5dadd",
-    roughness: 1
-  })
-);
-
-floor.rotation.x = -Math.PI / 2;
-floor.position.y = -0.49;
-
-scene.add(floor);
-
-// -------------------------------------
-// BREADBOARD
-// -------------------------------------
-
-const breadboard = new THREE.Group();
-
-breadboard.position.set(0, 0.01, 0);
-
-scene.add(breadboard);
-
-// Main body
-addBox(
-  breadboard,
-  [8, 0.24, 4.35],
-  [0, 0, 0],
-  materials.breadboard
-);
-
-// Outer border
-const borderMaterial = new THREE.MeshStandardMaterial({
-  color: "#c5cbc7",
-  roughness: 0.8
-});
-
-// Power rail strips
-addBox(
-  breadboard,
-  [7.65, 0.018, 0.045],
-  [0, 0.13, -1.86],
-  materials.red
-);
-
-addBox(
-  breadboard,
-  [7.65, 0.018, 0.045],
-  [0, 0.13, -1.65],
-  materials.blue
-);
-
-addBox(
-  breadboard,
-  [7.65, 0.018, 0.045],
-  [0, 0.13, 1.65],
-  materials.red
-);
-
-addBox(
-  breadboard,
-  [7.65, 0.018, 0.045],
-  [0, 0.13, 1.86],
-  materials.blue
-);
-
-// Central IC channel
-addBox(
-  breadboard,
-  [7.7, 0.025, 0.28],
-  [0, 0.135, 0],
-  new THREE.MeshStandardMaterial({
-    color: "#d0d4cf"
-  })
-);
-
-// -------------------------------------
-// BREADBOARD HOLES
-// -------------------------------------
-
-const holeGeometry = new THREE.CylinderGeometry(
-  0.043,
-  0.043,
-  0.018,
-  12
-);
-
-const holeMaterial = materials.hole;
-
-const holeInstances = [];
-
-function createHole(x, z) {
-  holeInstances.push([x, z]);
-}
-
-// Main terminal strips
-for (let col = 0; col < 30; col++) {
-
-  const x = -3.65 + col * 0.25;
-
-  for (const side of [-1, 1]) {
-
-    for (let row = 0; row < 5; row++) {
-
-      const z = side * (0.36 + row * 0.24);
-
-      createHole(x, z);
+        this.initialize();
     }
-  }
+
+
+    /* =====================================
+       2. DETECT EXPERIMENT MODE
+    ===================================== */
+
+    detectExperimentMode() {
+
+        const path = window.location.pathname.toLowerCase();
+
+        if (path.includes('reverse')) {
+            return 'reverse';
+        }
+
+        if (
+            path.includes('load-regulation') ||
+            path.includes('load_regulation')
+        ) {
+            return 'load-regulation';
+        }
+
+        return 'forward';
+    }
+
+
+    /* =====================================
+       3. INITIALIZE APPLICATION
+    ===================================== */
+
+    initialize() {
+
+        this.createScene();
+
+        this.createCamera();
+
+        this.createRenderer();
+
+        this.createLights();
+
+        this.createEnvironment();
+
+        this.createLaboratoryComponents();
+
+        this.createCircuitBuilder();
+
+        this.createSimulation();
+
+        this.createGraph();
+
+        this.createViva();
+
+        this.setupControls();
+
+        this.setupInteractions();
+
+        this.setupResize();
+
+        this.updateExperimentHeading();
+
+        this.hideLoadingScreen();
+
+        this.animate();
+
+        console.log(
+            'ZENER-LAB-360 initialized:',
+            this.mode
+        );
+    }
+
+
+    /* =====================================
+       4. CREATE SCENE
+    ===================================== */
+
+    createScene() {
+
+        this.scene = new THREE.Scene();
+
+        this.scene.background =
+            new THREE.Color(0x101a2a);
+
+        this.scene.fog = new THREE.Fog(
+            0x101a2a,
+            22,
+            55
+        );
+    }
+
+
+    /* =====================================
+       5. CREATE CAMERA
+    ===================================== */
+
+    createCamera() {
+
+        const width =
+            this.container.clientWidth || 800;
+
+        const height =
+            this.container.clientHeight || 500;
+
+        this.camera = new THREE.PerspectiveCamera(
+            45,
+            width / height,
+            0.1,
+            100
+        );
+
+        this.camera.position.set(
+            10,
+            9,
+            12
+        );
+
+        this.camera.lookAt(
+            0,
+            0,
+            0
+        );
+    }
+
+
+    /* =====================================
+       6. CREATE RENDERER
+    ===================================== */
+
+    createRenderer() {
+
+        this.renderer = new THREE.WebGLRenderer({
+            antialias: true,
+            alpha: false
+        });
+
+        this.renderer.setPixelRatio(
+            Math.min(
+                window.devicePixelRatio || 1,
+                2
+            )
+        );
+
+        this.renderer.setSize(
+            this.container.clientWidth || 800,
+            this.container.clientHeight || 500
+        );
+
+        this.renderer.shadowMap.enabled = true;
+
+        this.renderer.shadowMap.type =
+            THREE.PCFSoftShadowMap;
+
+        this.renderer.outputColorSpace =
+            THREE.SRGBColorSpace;
+
+        this.renderer.toneMapping =
+            THREE.ACESFilmicToneMapping;
+
+        this.renderer.toneMappingExposure = 1.15;
+
+        this.container.appendChild(
+            this.renderer.domElement
+        );
+
+        this.renderer.domElement.style.display =
+            'block';
+
+        this.renderer.domElement.style.width =
+            '100%';
+
+        this.renderer.domElement.style.height =
+            '100%';
+    }
+
+
+    /* =====================================
+       7. CREATE LIGHTS
+    ===================================== */
+
+    createLights() {
+
+        const ambient = new THREE.AmbientLight(
+            0xffffff,
+            1.5
+        );
+
+        this.scene.add(ambient);
+
+        const mainLight = new THREE.DirectionalLight(
+            0xffffff,
+            2.5
+        );
+
+        mainLight.position.set(
+            8,
+            15,
+            10
+        );
+
+        mainLight.castShadow = true;
+
+        mainLight.shadow.mapSize.set(
+            2048,
+            2048
+        );
+
+        this.scene.add(mainLight);
+
+        const fillLight = new THREE.PointLight(
+            0x27d9cf,
+            35,
+            30
+        );
+
+        fillLight.position.set(
+            -8,
+            6,
+            -5
+        );
+
+        this.scene.add(fillLight);
+
+        const backLight = new THREE.DirectionalLight(
+            0x568bff,
+            1.1
+        );
+
+        backLight.position.set(
+            -5,
+            8,
+            8
+        );
+
+        this.scene.add(backLight);
+    }
+
+
+    /* =====================================
+       8. CREATE ENVIRONMENT
+    ===================================== */
+
+    createEnvironment() {
+
+        const floorGeometry =
+            new THREE.PlaneGeometry(60, 60);
+
+        const floorMaterial =
+            new THREE.MeshStandardMaterial({
+                color: 0x172438,
+                roughness: 0.85
+            });
+
+        const floor = new THREE.Mesh(
+            floorGeometry,
+            floorMaterial
+        );
+
+        floor.rotation.x = -Math.PI / 2;
+
+        floor.position.y = -0.65;
+
+        floor.receiveShadow = true;
+
+        this.scene.add(floor);
+
+        // Laboratory table
+        const tableGeometry =
+            new THREE.BoxGeometry(17, 0.45, 12);
+
+        const tableMaterial =
+            new THREE.MeshStandardMaterial({
+                color: 0x28384b,
+                roughness: 0.55
+            });
+
+        const table = new THREE.Mesh(
+            tableGeometry,
+            tableMaterial
+        );
+
+        table.position.set(
+            0,
+            -0.35,
+            0
+        );
+
+        table.receiveShadow = true;
+
+        table.castShadow = true;
+
+        this.scene.add(table);
+
+        // Grid helper
+        const grid = new THREE.GridHelper(
+            50,
+            50,
+            0x34506b,
+            0x26394f
+        );
+
+        grid.position.y = -0.11;
+
+        grid.material.transparent = true;
+
+        grid.material.opacity = 0.18;
+
+        this.scene.add(grid);
+    }
+
+
+    /* =====================================
+       9. CREATE COMPONENTS
+    ===================================== */
+
+    createLaboratoryComponents() {
+
+        // Breadboard
+        const breadboard = createBreadboard();
+
+        breadboard.position.set(
+            0,
+            0,
+            0
+        );
+
+        this.scene.add(breadboard);
+
+        this.components.breadboard =
+            breadboard;
+
+
+        // Zener diode
+        const diode = createComponent('zener');
+
+        diode.position.set(
+            -1.1,
+            0.35,
+            0
+        );
+
+        this.scene.add(diode);
+
+        this.components.zener = diode;
+
+
+        // Series resistor
+        const resistor = createComponent('resistor');
+
+        resistor.position.set(
+            1.1,
+            0.35,
+            0
+        );
+
+        this.scene.add(resistor);
+
+        this.components.resistor = resistor;
+
+
+        // Potentiometer
+        const potentiometer =
+            createComponent('potentiometer');
+
+        potentiometer.position.set(
+            3,
+            0.35,
+            1.5
+        );
+
+        this.scene.add(potentiometer);
+
+        this.components.potentiometer =
+            potentiometer;
+
+
+        // DC power supply
+        const supply =
+            createComponent('dcSupply');
+
+        supply.position.set(
+            -7,
+            0,
+            -1
+        );
+
+        this.scene.add(supply);
+
+        this.components.dcSupply = supply;
+
+
+        // Ammeter
+        const ammeter =
+            createComponent('ammeter');
+
+        ammeter.position.set(
+            -5.5,
+            0,
+            3
+        );
+
+        this.scene.add(ammeter);
+
+        this.components.ammeter = ammeter;
+
+
+        // Voltmeter
+        const voltmeter =
+            createComponent('voltmeter');
+
+        voltmeter.position.set(
+            5.5,
+            0,
+            3
+        );
+
+        this.scene.add(voltmeter);
+
+        this.components.voltmeter = voltmeter;
+
+
+        // Hole markers
+        this.holeMarkers = createHoleMarkers(
+            this.scene,
+            {
+                visible: false
+            }
+        );
+    }
+
+
+    /* =====================================
+       10. CIRCUIT BUILDER
+    ===================================== */
+
+    createCircuitBuilder() {
+
+        this.circuitBuilder =
+            new CircuitBuilder(this.scene);
+
+        /*
+          The initial scene shows component models.
+          Circuit Builder can create additional
+          components and jumper wires.
+
+          Actual circuit wiring will be configured
+          in the circuit-building interface.
+        */
+    }
+
+
+    /* =====================================
+       11. SIMULATION
+    ===================================== */
+
+    createSimulation() {
+
+        this.simulation =
+            new ZenerSimulation({
+
+                seriesResistance: 1000,
+
+                loadResistance: 1000,
+
+                zenerVoltage: 5.1,
+
+                forwardVoltage: 0.7,
+
+                zenerResistance: 8,
+
+                maxCurrent: 0.02
+            });
+
+        this.simulation.setMode(
+            this.mode
+        );
+    }
+
+
+    /* =====================================
+       12. GRAPH
+    ===================================== */
+
+    createGraph() {
+
+        const canvas =
+            document.getElementById('viGraph');
+
+        if (!canvas) {
+            console.warn(
+                'Graph canvas #viGraph not found.'
+            );
+
+            return;
+        }
+
+        this.graph = new ExperimentGraph(
+            canvas
+        );
+
+        if (this.mode === 'load-regulation') {
+
+            this.graph.setGraphType('load');
+        }
+
+        else {
+
+            this.graph.setGraphType('vi');
+        }
+
+        this.graph.draw();
+    }
+
+
+    /* =====================================
+       13. VIVA
+    ===================================== */
+
+    createViva() {
+
+        const vivaContainer =
+            document.getElementById('vivaContainer') ||
+            document.getElementById('viva-content') ||
+            document.querySelector('.viva-content');
+
+        if (!vivaContainer) {
+            return;
+        }
+
+        this.viva = new VivaModule(
+            vivaContainer
+        );
+    }
+
+
+    /* =====================================
+       14. FIND ELEMENT BY SELECTORS
+    ===================================== */
+
+    findElement(...selectors) {
+
+        for (const selector of selectors) {
+
+            const element =
+                document.querySelector(selector);
+
+            if (element) {
+                return element;
+            }
+        }
+
+        return null;
+    }
+
+
+    /* =====================================
+       15. SETUP UI CONTROLS
+    ===================================== */
+
+    setupControls() {
+
+        this.voltageSlider = this.findElement(
+            '#voltageSlider',
+            '#supplyVoltage',
+            '#voltageRange',
+            'input[type="range"]'
+        );
+
+        this.voltageValue = this.findElement(
+            '#voltageValue',
+            '#voltageDisplay',
+            '[data-voltage-value]'
+        );
+
+        this.ammeterDisplay = this.findElement(
+            '#currentReading',
+            '#ammeterValue',
+            '[data-meter="current"]'
+        );
+
+        this.voltmeterDisplay = this.findElement(
+            '#voltageReading',
+            '#voltmeterValue',
+            '[data-meter="voltage"]'
+        );
+
+        this.powerDisplay = this.findElement(
+            '#powerReading',
+            '#powerValue',
+            '[data-meter="power"]'
+        );
+
+        this.regionDisplay = this.findElement(
+            '#operatingRegion',
+            '#regionValue',
+            '[data-operating-region]'
+        );
+
+
+        if (this.voltageSlider) {
+
+            this.voltageSlider.min = '0';
+
+            this.voltageSlider.max = '12';
+
+            this.voltageSlider.step = '0.1';
+
+            this.voltageSlider.addEventListener(
+                'input',
+                () => {
+
+                    const voltage =
+                        Number(this.voltageSlider.value);
+
+                    this.updateVoltageLabel(voltage);
+
+                    this.runSimulation(voltage);
+                }
+            );
+        }
+
+
+        // Initial voltage
+        const initialVoltage =
+            this.voltageSlider
+                ? Number(this.voltageSlider.value)
+                : 0;
+
+        this.updateVoltageLabel(initialVoltage);
+
+        this.runSimulation(initialVoltage);
+
+
+        // Button actions
+        this.bindButton(
+            ['#runBtn', '#startSimulation', '[data-action="run"]'],
+            () => this.runSimulation()
+        );
+
+        this.bindButton(
+            ['#recordBtn', '#recordReading', '[data-action="record"]'],
+            () => this.recordObservation()
+        );
+
+        this.bindButton(
+            ['#resetBtn', '#resetSimulation', '[data-action="reset"]'],
+            () => this.resetExperiment()
+        );
+
+        this.bindButton(
+            ['#rotateBtn', '[data-action="rotate"]'],
+            () => this.rotateCamera()
+        );
+
+        this.bindButton(
+            ['#zoomInBtn', '[data-action="zoom-in"]'],
+            () => this.zoomCamera(0.85)
+        );
+
+        this.bindButton(
+            ['#zoomOutBtn', '[data-action="zoom-out"]'],
+            () => this.zoomCamera(1.15)
+        );
+
+        this.bindButton(
+            ['#showHolesBtn', '[data-action="show-holes"]'],
+            () => this.toggleHoleMarkers()
+        );
+
+        this.bindButton(
+            ['#generateGraphBtn', '[data-action="graph"]'],
+            () => this.generateGraph()
+        );
+
+
+        // Resistance controls
+        const resistanceInput = this.findElement(
+            '#seriesResistance',
+            '#resistanceSlider'
+        );
+
+        if (resistanceInput) {
+
+            resistanceInput.addEventListener(
+                'input',
+                () => {
+
+                    this.simulation.updateParameters({
+                        seriesResistance:
+                            Number(resistanceInput.value)
+                    });
+
+                    this.runSimulation();
+                }
+            );
+        }
+
+
+        const loadInput = this.findElement(
+            '#loadResistance',
+            '#loadSlider'
+        );
+
+        if (loadInput) {
+
+            loadInput.addEventListener(
+                'input',
+                () => {
+
+                    this.simulation.updateParameters({
+                        loadResistance:
+                            Number(loadInput.value)
+                    });
+
+                    this.runSimulation();
+                }
+            );
+        }
+    }
+
+
+    /* =====================================
+       16. BIND BUTTON
+    ===================================== */
+
+    bindButton(selectors, callback) {
+
+        const button = this.findElement(
+            ...selectors
+        );
+
+        if (!button) {
+            return;
+        }
+
+        button.addEventListener(
+            'click',
+            event => {
+
+                event.preventDefault();
+
+                callback();
+            }
+        );
+    }
+
+
+    /* =====================================
+       17. UPDATE VOLTAGE LABEL
+    ===================================== */
+
+    updateVoltageLabel(voltage) {
+
+        if (!this.voltageValue) {
+            return;
+        }
+
+        this.voltageValue.textContent =
+            `${Number(voltage).toFixed(1)} V`;
+    }
+
+
+    /* =====================================
+       18. RUN SIMULATION
+    ===================================== */
+
+    runSimulation(voltage) {
+
+        if (!this.simulation) {
+            return null;
+        }
+
+        let inputVoltage;
+
+        if (voltage !== undefined) {
+            inputVoltage = Number(voltage);
+        }
+
+        else if (this.voltageSlider) {
+            inputVoltage =
+                Number(this.voltageSlider.value);
+        }
+
+        else {
+            inputVoltage =
+                this.simulation.supplyVoltage;
+        }
+
+        const result =
+            this.simulation.run(inputVoltage);
+
+        this.updateMeters(result);
+
+        this.updateComponentDisplays(result);
+
+        this.lastResult = result;
+
+        return result;
+    }
+
+
+    /* =====================================
+       19. UPDATE METER READINGS
+    ===================================== */
+
+    updateMeters(result) {
+
+        if (!result) {
+            return;
+        }
+
+        const current =
+            result.currentMilliampere ??
+            result.loadCurrentMilliampere ??
+            0;
+
+        const voltage =
+            result.diodeVoltage ??
+            result.outputVoltage ??
+            0;
+
+        const power =
+            result.powerMilliwatt ??
+            result.zenerPowerMilliwatt ??
+            0;
+
+        if (this.ammeterDisplay) {
+
+            this.ammeterDisplay.textContent =
+                `${current.toFixed(3)} mA`;
+        }
+
+        if (this.voltmeterDisplay) {
+
+            this.voltmeterDisplay.textContent =
+                `${voltage.toFixed(3)} V`;
+        }
+
+        if (this.powerDisplay) {
+
+            this.powerDisplay.textContent =
+                `${power.toFixed(3)} mW`;
+        }
+
+        if (this.regionDisplay) {
+
+            this.regionDisplay.textContent =
+                result.region;
+        }
+    }
+
+
+    /* =====================================
+       20. UPDATE 3D METER DISPLAYS
+    ===================================== */
+
+    updateComponentDisplays(result) {
+
+        if (!result) {
+            return;
+        }
+
+        const current =
+            result.currentMilliampere ??
+            result.loadCurrentMilliampere ??
+            0;
+
+        const voltage =
+            result.diodeVoltage ??
+            result.outputVoltage ??
+            0;
+
+        this.update3DLabel(
+            this.components.ammeter,
+            `${current.toFixed(2)} mA`
+        );
+
+        this.update3DLabel(
+            this.components.voltmeter,
+            `${voltage.toFixed(2)} V`
+        );
+    }
+
+
+    update3DLabel(component, value) {
+
+        if (!component) {
+            return;
+        }
+
+        const label = component.children.find(
+            child =>
+                child.isMesh &&
+                child.material &&
+                child.material.map
+        );
+
+        if (!label) {
+            return;
+        }
+
+        const canvas =
+            document.createElement('canvas');
+
+        canvas.width = 512;
+
+        canvas.height = 128;
+
+        const ctx = canvas.getContext('2d');
+
+        ctx.clearRect(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+
+        ctx.fillStyle = '#7dffdc';
+
+        ctx.font = 'bold 48px Arial';
+
+        ctx.textAlign = 'center';
+
+        ctx.textBaseline = 'middle';
+
+        ctx.fillText(
+            value,
+            256,
+            64
+        );
+
+        const texture =
+            new THREE.CanvasTexture(canvas);
+
+        label.material.map = texture;
+
+        label.material.needsUpdate = true;
+    }
+
+
+    /* =====================================
+       21. RECORD OBSERVATION
+    ===================================== */
+
+    recordObservation() {
+
+        if (!this.lastResult) {
+            this.runSimulation();
+        }
+
+        const observation =
+            this.simulation.recordObservation();
+
+        if (!observation) {
+            return;
+        }
+
+        this.observations.push(observation);
+
+        this.updateObservationTable();
+
+        this.showMessage(
+            'Observation recorded successfully.'
+        );
+    }
+
+
+    /* =====================================
+       22. UPDATE OBSERVATION TABLE
+    ===================================== */
+
+    updateObservationTable() {
+
+        const tableBody = this.findElement(
+            '#observationBody',
+            '#observationTable tbody',
+            '#observationTableBody',
+            '[data-observations]'
+        );
+
+        if (!tableBody) {
+            return;
+        }
+
+        tableBody.innerHTML = '';
+
+        this.observations.forEach(
+            (item, index) => {
+
+                const voltage =
+                    item.diodeVoltage ??
+                    item.outputVoltage ??
+                    0;
+
+                const current =
+                    item.currentMilliampere ??
+                    item.loadCurrentMilliampere ??
+                    0;
+
+                const row =
+                    document.createElement('tr');
+
+                const values = [
+                    index + 1,
+                    voltage.toFixed(3),
+                    current.toFixed(3),
+                    item.region
+                ];
+
+                values.forEach(value => {
+
+                    const cell =
+                        document.createElement('td');
+
+                    cell.textContent = value;
+
+                    row.appendChild(cell);
+                });
+
+                tableBody.appendChild(row);
+            }
+        );
+    }
+
+
+    /* =====================================
+       23. GENERATE GRAPH
+    ===================================== */
+
+    generateGraph() {
+
+        if (!this.graph) {
+            return;
+        }
+
+        if (this.mode === 'load-regulation') {
+
+            const data =
+                this.simulation.generateLoadData();
+
+            this.graph
+                .setGraphType('load')
+                .setData(data);
+        }
+
+        else {
+
+            const data =
+                this.simulation.generateVIData(
+                    0,
+                    12,
+                    60
+                );
+
+            this.graph
+                .setGraphType('vi')
+                .setData(data);
+        }
+
+        this.showMessage(
+            'Graph generated successfully.'
+        );
+    }
+
+
+    /* =====================================
+       24. RESET EXPERIMENT
+    ===================================== */
+
+    resetExperiment() {
+
+        this.observations = [];
+
+        this.simulation.reset();
+
+        if (this.voltageSlider) {
+            this.voltageSlider.value = 0;
+        }
+
+        this.updateVoltageLabel(0);
+
+        this.runSimulation(0);
+
+        if (this.graph) {
+            this.graph.clear();
+        }
+
+        this.updateObservationTable();
+
+        this.showMessage(
+            'Experiment has been reset.'
+        );
+    }
+
+
+    /* =====================================
+       25. CHANGE EXPERIMENT HEADING
+    ===================================== */
+
+    updateExperimentHeading() {
+
+        const heading =
+            document.getElementById('experimentTitle');
+
+        if (!heading) {
+            return;
+        }
+
+        const titles = {
+
+            forward:
+                'Forward Bias Characteristics',
+
+            reverse:
+                'Reverse Bias Characteristics',
+
+            'load-regulation':
+                'Zener Diode Load Regulation'
+        };
+
+        heading.textContent =
+            titles[this.mode] ||
+            titles.forward;
+    }
+
+
+    /* =====================================
+       26. CAMERA ROTATION
+    ===================================== */
+
+    rotateCamera() {
+
+        if (!this.controls) {
+            return;
+        }
+
+        const current =
+            this.camera.position.clone();
+
+        const angle = Math.PI / 4;
+
+        const x =
+            current.x * Math.cos(angle) -
+            current.z * Math.sin(angle);
+
+        const z =
+            current.x * Math.sin(angle) +
+            current.z * Math.cos(angle);
+
+        this.camera.position.set(
+            x,
+            current.y,
+            z
+        );
+
+        this.controls.update();
+    }
+
+
+    /* =====================================
+       27. CAMERA ZOOM
+    ===================================== */
+
+    zoomCamera(factor) {
+
+        if (!this.camera) {
+            return;
+        }
+
+        const direction =
+            this.camera.position.clone()
+                .sub(this.controls.target);
+
+        direction.multiplyScalar(factor);
+
+        this.camera.position.copy(
+            this.controls.target.clone().add(direction)
+        );
+
+        this.controls.update();
+    }
+
+
+    /* =====================================
+       28. TOGGLE BREADBOARD HOLES
+    ===================================== */
+
+    toggleHoleMarkers() {
+
+        if (!this.holeMarkers) {
+            return;
+        }
+
+        this.holeMarkers.visible =
+            !this.holeMarkers.visible;
+    }
+
+
+    /* =====================================
+       29. SETUP 3D INTERACTIONS
+    ===================================== */
+
+    setupInteractions() {
+
+        this.renderer.domElement.addEventListener(
+            'pointerdown',
+            event => {
+
+                const rect =
+                    this.renderer.domElement.getBoundingClientRect();
+
+                this.pointer.x =
+                    ((event.clientX - rect.left) /
+                        rect.width) * 2 - 1;
+
+                this.pointer.y =
+                    -((event.clientY - rect.top) /
+                        rect.height) * 2 + 1;
+
+                this.raycaster.setFromCamera(
+                    this.pointer,
+                    this.camera
+                );
+
+                const objects = [
+                    ...Object.values(this.components)
+                ];
+
+                const intersections =
+                    this.raycaster.intersectObjects(
+                        objects,
+                        true
+                    );
+
+                if (!intersections.length) {
+                    this.selectedObject = null;
+                    return;
+                }
+
+                let selected =
+                    intersections[0].object;
+
+                while (
+                    selected.parent &&
+                    !selected.userData.type
+                ) {
+                    selected = selected.parent;
+                }
+
+                this.selectedObject = selected;
+
+                this.showComponentInformation(
+                    selected
+                );
+            }
+        );
+    }
+
+
+    /* =====================================
+       30. COMPONENT INFORMATION
+    ===================================== */
+
+    showComponentInformation(object) {
+
+        const info =
+            document.getElementById('componentInfo');
+
+        if (!info) {
+            return;
+        }
+
+        const data = object.userData || {};
+
+        const name =
+            data.name ||
+            data.type ||
+            'Electronic Component';
+
+        const description =
+            data.description ||
+            'Laboratory component';
+
+        info.innerHTML = '';
+
+        const title =
+            document.createElement('strong');
+
+        title.textContent = name;
+
+        const text =
+            document.createElement('p');
+
+        text.textContent = description;
+
+        info.append(
+            title,
+            text
+        );
+
+        info.classList.add('active');
+    }
+
+
+    /* =====================================
+       31. CAMERA CONTROLS
+    ===================================== */
+
+    createCameraControls() {
+
+        this.controls = new OrbitControls(
+            this.camera,
+            this.renderer.domElement
+        );
+
+        this.controls.enableDamping = true;
+
+        this.controls.dampingFactor = 0.06;
+
+        this.controls.enablePan = true;
+
+        this.controls.enableZoom = true;
+
+        this.controls.minDistance = 5;
+
+        this.controls.maxDistance = 30;
+
+        this.controls.maxPolarAngle =
+            Math.PI * 0.48;
+
+        this.controls.target.set(
+            0,
+            0,
+            0
+        );
+
+        this.controls.update();
+    }
+
+
+    /* =====================================
+       32. SETUP CAMERA CONTROLS
+    ===================================== */
+
+    setupCameraControls() {
+
+        if (this.controls) {
+            return;
+        }
+
+        this.createCameraControls();
+    }
+
+
+    /* =====================================
+       33. RESIZE HANDLER
+    ===================================== */
+
+    setupResize() {
+
+        this.setupCameraControls();
+
+        const resize = () => {
+
+            const width =
+                this.container.clientWidth;
+
+            const height =
+                this.container.clientHeight;
+
+            if (!width || !height) {
+                return;
+            }
+
+            this.camera.aspect =
+                width / height;
+
+            this.camera.updateProjectionMatrix();
+
+            this.renderer.setSize(
+                width,
+                height
+            );
+
+            this.renderer.setPixelRatio(
+                Math.min(
+                    window.devicePixelRatio || 1,
+                    2
+                )
+            );
+        };
+
+        window.addEventListener(
+            'resize',
+            resize
+        );
+
+        if (window.ResizeObserver) {
+
+            this.resizeObserver =
+                new ResizeObserver(resize);
+
+            this.resizeObserver.observe(
+                this.container
+            );
+        }
+
+        resize();
+    }
+
+
+    /* =====================================
+       34. ANIMATION LOOP
+    ===================================== */
+
+    animate() {
+
+        this.animationFrame =
+            requestAnimationFrame(
+                () => this.animate()
+            );
+
+        const delta =
+            this.clock.getDelta();
+
+        if (this.controls) {
+            this.controls.update();
+        }
+
+        // Subtle component animation
+        if (this.components.potentiometer) {
+
+            this.components.potentiometer.rotation.y +=
+                delta * 0.08;
+        }
+
+        this.renderer.render(
+            this.scene,
+            this.camera
+        );
+    }
+
+
+    /* =====================================
+       35. LOADING SCREEN
+    ===================================== */
+
+    hideLoadingScreen() {
+
+        const loader =
+            document.getElementById('loadingScreen') ||
+            document.getElementById('loader');
+
+        if (!loader) {
+            return;
+        }
+
+        loader.classList.add('hidden');
+
+        setTimeout(() => {
+
+            loader.style.display = 'none';
+
+        }, 500);
+    }
+
+
+    /* =====================================
+       36. MESSAGE
+    ===================================== */
+
+    showMessage(message) {
+
+        const existing =
+            document.getElementById('labToast');
+
+        if (existing) {
+            existing.remove();
+        }
+
+        const toast =
+            document.createElement('div');
+
+        toast.id = 'labToast';
+
+        toast.textContent = message;
+
+        toast.style.cssText = `
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            z-index: 9999;
+            padding: 13px 18px;
+            border-radius: 9px;
+            background: #123b42;
+            color: #ffffff;
+            border: 1px solid #22d3ee;
+            font-size: 13px;
+            box-shadow: 0 8px 25px rgba(0,0,0,.3);
+        `;
+
+        document.body.appendChild(toast);
+
+        setTimeout(() => {
+            toast.remove();
+        }, 2500);
+    }
+
+
+    /* =====================================
+       37. CLEANUP
+    ===================================== */
+
+    destroy() {
+
+        if (this.animationFrame) {
+
+            cancelAnimationFrame(
+                this.animationFrame
+            );
+        }
+
+        if (this.resizeObserver) {
+
+            this.resizeObserver.disconnect();
+        }
+
+        if (this.controls) {
+            this.controls.dispose();
+        }
+
+        if (this.graph) {
+            this.graph.destroy();
+        }
+
+        if (this.viva) {
+            this.viva.destroy();
+        }
+
+        if (this.renderer) {
+
+            this.renderer.dispose();
+
+            this.renderer.domElement.remove();
+        }
+
+        window.removeEventListener(
+            'resize',
+            this.resizeHandler
+        );
+    }
 }
 
-// Power rails
-for (let col = 0; col < 30; col++) {
 
-  const x = -3.65 + col * 0.25;
+/* =========================================
+   38. START LABORATORY
+========================================= */
 
-  [-1.86, -1.65, 1.65, 1.86].forEach(z => {
-    createHole(x, z);
-  });
+let laboratory = null;
+
+function startLaboratory() {
+
+    if (laboratory) {
+        return;
+    }
+
+    try {
+
+        laboratory =
+            new ZenerLaboratory();
+
+        window.zenerLab = laboratory;
+
+    }
+
+    catch (error) {
+
+        console.error(
+            'Laboratory initialization failed:',
+            error
+        );
+
+        const loader =
+            document.getElementById('loadingScreen');
+
+        if (loader) {
+
+            loader.textContent =
+                'Unable to load the 3D laboratory. Please refresh the page.';
+        }
+    }
 }
 
-const holes = new THREE.InstancedMesh(
-  holeGeometry,
-  holeMaterial,
-  holeInstances.length
-);
 
-const dummy = new THREE.Object3D();
+if (document.readyState === 'loading') {
 
-holeInstances.forEach(([x, z], index) => {
-
-  dummy.position.set(x, 0.145, z);
-  dummy.updateMatrix();
-
-  holes.setMatrixAt(index, dummy.matrix);
-
-});
-
-holes.castShadow = false;
-holes.receiveShadow = true;
-
-breadboard.add(holes);
-
-// Breadboard markings
-addText(
-  breadboard,
-  "+  POWER RAIL",
-  [-2.7, 0.155, -1.9],
-  0.09,
-  "#b82f2f"
-);
-
-addText(
-  breadboard,
-  "-  POWER RAIL",
-  [2.7, 0.155, 1.9],
-  0.09,
-  "#2764b0"
-);
-
-// -------------------------------------
-// COMPONENT INFORMATION
-// -------------------------------------
-
-const componentObjects = [];
-
-function registerComponent(group, name, description) {
-
-  group.userData.componentInfo = {
-    name,
-    description
-  };
-
-  componentObjects.push(group);
-
-  return group;
-}
-
-// -------------------------------------
-// ZENER DIODE MODEL
-// -------------------------------------
-
-function createZenerDiode() {
-
-  const group = new THREE.Group();
-
-  group.position.set(0.5, 0.43, 0.05);
-
-  // Diode body
-  const body = addCylinder(
-    group,
-    0.105,
-    0.65,
-    [0, 0, 0],
-    materials.diode,
-    [0, 0, Math.PI / 2]
-  );
-
-  // Cathode marking
-  const band = addCylinder(
-    group,
-    0.109,
-    0.075,
-    [0.25, 0, 0],
-    materials.metal,
-    [0, 0, Math.PI / 2]
-  );
-
-  // Anode lead
-  addCylinder(
-    group,
-    0.022,
-    0.72,
-    [-0.67, 0, 0],
-    materials.metal,
-    [0, 0, Math.PI / 2]
-  );
-
-  // Cathode lead
-  addCylinder(
-    group,
-    0.022,
-    0.72,
-    [0.67, 0, 0],
-    materials.metal,
-    [0, 0, Math.PI / 2]
-  );
-
-  registerComponent(
-    group,
-    "Zener Diode",
-    "Semiconductor diode. The silver band marks the cathode. This experiment studies its forward-bias behavior."
-  );
-
-  return group;
-}
-
-const zenerDiode = createZenerDiode();
-
-breadboard.add(zenerDiode);
-
-// -------------------------------------
-// RESISTOR MODEL
-// -------------------------------------
-
-function createResistor() {
-
-  const group = new THREE.Group();
-
-  group.position.set(-1.7, 0.43, 0.8);
-
-  // Resistor body
-  addCylinder(
-    group,
-    0.12,
-    0.65,
-    [0, 0, 0],
-    materials.resistor,
-    [0, 0, Math.PI / 2]
-  );
-
-  // Leads
-  [-0.72, 0.72].forEach(x => {
-
-    addCylinder(
-      group,
-      0.018,
-      0.75,
-      [x, 0, 0],
-      materials.metal,
-      [0, 0, Math.PI / 2]
+    document.addEventListener(
+        'DOMContentLoaded',
+        startLaboratory,
+        { once: true }
     );
 
-  });
-
-  // Color bands
-  const bandColors = [
-    "#794a2c",
-    "#d4a328",
-    "#8d3e28"
-  ];
-
-  bandColors.forEach((color, index) => {
-
-    addCylinder(
-      group,
-      0.124,
-      0.055,
-      [-0.17 + index * 0.16, 0, 0],
-      new THREE.MeshStandardMaterial({
-        color,
-        roughness: 0.6
-      }),
-      [0, 0, Math.PI / 2]
-    );
-
-  });
-
-  registerComponent(
-    group,
-    "1 kΩ Resistor",
-    "Series current-limiting resistor used to restrict current through the diode."
-  );
-
-  return group;
 }
 
-const resistor = createResistor();
+else {
 
-breadboard.add(resistor);
-
-// -------------------------------------
-// JUMPER WIRES
-// -------------------------------------
-
-function createWire(points, color, radius = 0.035) {
-
-  const curve = new THREE.CatmullRomCurve3(
-    points.map(point =>
-      new THREE.Vector3(...point)
-    )
-  );
-
-  const geometry = new THREE.TubeGeometry(
-    curve,
-    40,
-    radius,
-    10,
-    false
-  );
-
-  const material = new THREE.MeshStandardMaterial({
-    color,
-    roughness: 0.38,
-    metalness: 0.12
-  });
-
-  const wire = new THREE.Mesh(geometry, material);
-
-  wire.castShadow = true;
-
-  breadboard.add(wire);
-
-  return wire;
+    startLaboratory();
 }
-
-// Colored jumper connections
-createWire([
-  [-3.5, 0.3, -1.86],
-  [-3.5, 0.65, -2.1],
-  [-2.5, 0.65, -2.1],
-  [-2.5, 0.3, -1.65]
-], "#d94343");
-
-createWire([
-  [3.5, 0.3, 1.86],
-  [3.5, 0.65, 2.1],
-  [2.5, 0.65, 2.1],
-  [2.5, 0.3, 1.65]
-], "#277ac8");
-
-// -------------------------------------
-// DIGITAL INSTRUMENT SCREENS
-// -------------------------------------
-
-function createDisplayTexture(initialText, color = "#59f3ad") {
-
-  const canvas = document.createElement("canvas");
-
-  canvas.width = 512;
-  canvas.height = 180;
-
-  const ctx = canvas.getContext("2d");
-
-  const texture = new THREE.CanvasTexture(canvas);
-
-  function update(text) {
-
-    ctx.fillStyle = "#10221d";
-    ctx.fillRect(0, 0, 512, 180);
-
-    ctx.fillStyle = color;
-    ctx.font = "bold 75px monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    ctx.fillText(text, 256, 92);
-
-    texture.needsUpdate = true;
-  }
-
-  update(initialText);
-
-  return { texture, update };
-}
-
-// -------------------------------------
-// INSTRUMENT MODEL
-// -------------------------------------
-
-function createInstrument(name, position, screenText, info) {
-
-  const group = new THREE.Group();
-
-  group.position.set(...position);
-
-  // Instrument case
-  addBox(
-    group,
-    [2.1, 0.4, 2.5],
-    [0, 0.2, 0],
-    new THREE.MeshStandardMaterial({
-      color: "#303b42",
-      roughness: 0.45
-    })
-  );
-
-  // Front panel
-  addBox(
-    group,
-    [1.8, 0.08, 2.15],
-    [0, 0.43, 0],
-    new THREE.MeshStandardMaterial({
-      color: "#d4d8d8",
-      roughness: 0.6
-    })
-  );
-
-  // Screen
-  const display = createDisplayTexture(screenText);
-
-  const screen = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.25, 0.46),
-    new THREE.MeshBasicMaterial({
-      map: display.texture,
-      side: THREE.DoubleSide
-    })
-  );
-
-  screen.rotation.x = -Math.PI / 2;
-
-  screen.position.set(0, 0.49, -0.45);
-
-  group.add(screen);
-
-  // Control knob
-  addCylinder(
-    group,
-    0.23,
-    0.13,
-    [0, 0.52, 0.55],
-    materials.plastic,
-    [Math.PI / 2, 0, 0]
-  );
-
-  // Terminal sockets
-  [-0.48, 0.48].forEach((x, index) => {
-
-    const socket = addCylinder(
-      group,
-      0.095,
-      0.06,
-      [x, 0.49, 0.93],
-      index === 0 ? materials.red : materials.plastic,
-      [0, 0, 0]
-    );
-
-  });
-
-  addText(
-    group,
-    name,
-    [0, 0.51, -0.95],
-    0.12
-  );
-
-  registerComponent(
-    group,
-    name,
-    info
-  );
-
-  return {
-    group,
-    updateDisplay: display.update
-  };
-}
-
-// -------------------------------------
-// POWER SUPPLY
-// -------------------------------------
-
-const powerSupply = createInstrument(
-  "DC POWER SUPPLY",
-  [-5.2, 0, -2.8],
-  "0.0 V",
-  "Regulated DC supply. Used to provide an adjustable voltage for the experiment."
-);
-
-scene.add(powerSupply.group);
-
-// -------------------------------------
-// AMMETER
-// -------------------------------------
-
-const ammeter = createInstrument(
-  "DIGITAL AMMETER",
-  [4.7, 0, -2.8],
-  "0.00 mA",
-  "Ammeter measures electric current. It must be connected in series in a real circuit."
-);
-
-scene.add(ammeter.group);
-
-// -------------------------------------
-// VOLTMETER
-// -------------------------------------
-
-const voltmeter = createInstrument(
-  "DIGITAL VOLTMETER",
-  [4.7, 0, 1.0],
-  "0.00 V",
-  "Voltmeter measures voltage across the Zener diode. It must be connected in parallel."
-);
-
-scene.add(voltmeter.group);
-
-// -------------------------------------
-// COMPONENT SELECTION
-// -------------------------------------
-
-const raycaster = new THREE.Raycaster();
-
-const pointer = new THREE.Vector2();
-
-function findComponent(object) {
-
-  let current = object;
-
-  while (current) {
-
-    if (current.userData.componentInfo) {
-      return current.userData.componentInfo;
-    }
-
-    current = current.parent;
-  }
-
-  return null;
-}
-
-renderer.domElement.addEventListener("click", event => {
-
-  const rect = renderer.domElement.getBoundingClientRect();
-
-  pointer.x = (
-    (event.clientX - rect.left) / rect.width
-  ) * 2 - 1;
-
-  pointer.y = -(
-    (event.clientY - rect.top) / rect.height
-  ) * 2 + 1;
-
-  raycaster.setFromCamera(pointer, camera);
-
-  const intersects = raycaster.intersectObjects(
-    scene.children,
-    true
-  );
-
-  for (const hit of intersects) {
-
-    const info = findComponent(hit.object);
-
-    if (info) {
-
-      document.getElementById("componentInfo").innerHTML = `
-        <span class="component-icon">◉</span>
-        <strong>${info.name}</strong>
-        <p>${info.description}</p>
-      `;
-
-      return;
-    }
-  }
-
-});
-
-// -------------------------------------
-// CAMERA BUTTONS
-// -------------------------------------
-
-document.getElementById("topView").addEventListener("click", () => {
-
-  camera.position.set(0, 13, 0.1);
-
-  controls.target.set(0, 0.2, 0);
-
-  controls.update();
-
-});
-
-document.getElementById("resetView").addEventListener("click", () => {
-
-  camera.position.set(8, 8, 10);
-
-  controls.target.set(0, 0.4, 0);
-
-  controls.update();
-
-});
-
-let autoRotate = false;
-
-const rotateButton = document.getElementById("rotateView");
-
-rotateButton.addEventListener("click", () => {
-
-  autoRotate = !autoRotate;
-
-  controls.autoRotate = autoRotate;
-
-  controls.autoRotateSpeed = 1.5;
-
-  rotateButton.classList.toggle("active", autoRotate);
-
-});
-
-// -------------------------------------
-// FORWARD BIAS SIMULATION
-// -------------------------------------
-
-const voltageSlider = document.getElementById("voltageSlider");
-
-const voltageValue = document.getElementById("voltageValue");
-
-const powerButton = document.getElementById("powerBtn");
-
-const supplyDisplay = document.getElementById("supplyDisplay");
-
-const currentDisplay = document.getElementById("currentDisplay");
-
-const diodeDisplay = document.getElementById("diodeDisplay");
-
-const forwardVoltage = document.getElementById("forwardVoltage");
-
-const forwardCurrent = document.getElementById("forwardCurrent");
-
-let supplyOn = false;
-
-const seriesResistance = 1000;
-
-// Simplified illustrative forward diode model
-function calculateDiodeCurrent(voltage) {
-
-  const threshold = 0.58;
-
-  if (voltage <= threshold) {
-    return {
-      current: 0,
-      diodeVoltage: voltage
-    };
-  }
-
-  let low = 0;
-  let high = 0.02;
-
-  for (let i = 0; i < 45; i++) {
-
-    const mid = (low + high) / 2;
-
-    const vd = threshold + 0.06 *
-      Math.log(1 + mid / 0.001);
-
-    const totalVoltage = mid * seriesResistance + vd;
-
-    if (totalVoltage > voltage) {
-      high = mid;
-    } else {
-      low = mid;
-    }
-
-  }
-
-  const current = (low + high) / 2;
-
-  const diodeVoltage = threshold + 0.06 *
-    Math.log(1 + current / 0.001);
-
-  return {
-    current,
-    diodeVoltage
-  };
-}
-
-function updateSimulation() {
-
-  const voltage = supplyOn
-    ? Number(voltageSlider.value)
-    : 0;
-
-  const result = calculateDiodeCurrent(voltage);
-
-  const currentMA = result.current * 1000;
-
-  voltageValue.textContent = voltage.toFixed(1) + " V";
-
-  supplyDisplay.textContent = voltage.toFixed(1) + " V";
-
-  currentDisplay.textContent = currentMA.toFixed(2) + " mA";
-
-  diodeDisplay.textContent =
-    result.diodeVoltage.toFixed(2) + " V";
-
-  forwardVoltage.textContent =
-    result.diodeVoltage.toFixed(2) + " V";
-
-  forwardCurrent.textContent =
-    currentMA.toFixed(2) + " mA";
-
-  powerSupply.updateDisplay(voltage.toFixed(1) + " V");
-
-  ammeter.updateDisplay(currentMA.toFixed(2) + " mA");
-
-  voltmeter.updateDisplay(
-    result.diodeVoltage.toFixed(2) + " V"
-  );
-
-}
-
-voltageSlider.addEventListener("input", updateSimulation);
-
-powerButton.addEventListener("click", () => {
-
-  supplyOn = !supplyOn;
-
-  powerButton.classList.toggle("off", !supplyOn);
-
-  powerButton.innerHTML = supplyOn
-    ? '<span class="power-dot"></span> Turn OFF Supply'
-    : '<span class="power-dot"></span> Turn ON Supply';
-
-  voltageSlider.disabled = !supplyOn;
-
-  updateSimulation();
-
-});
-
-// -------------------------------------
-// OBSERVATION RECORDING
-// -------------------------------------
-
-const observations = [];
-
-document.getElementById("recordBtn").addEventListener("click", () => {
-
-  if (!supplyOn) {
-    alert("Please turn ON the power supply first.");
-    return;
-  }
-
-  const voltage = Number(voltageSlider.value);
-
-  const result = calculateDiodeCurrent(voltage);
-
-  observations.push({
-    reading: observations.length + 1,
-    supplyVoltage: voltage.toFixed(2),
-    diodeVoltage: result.diodeVoltage.toFixed(3),
-    currentMA: (result.current * 1000).toFixed(3)
-  });
-
-  alert(
-    "Observation " + observations.length +
-    " recorded successfully."
-  );
-
-  console.table(observations);
-
-});
-
-// -------------------------------------
-// RESET EXPERIMENT
-// -------------------------------------
-
-document.getElementById("resetSimulation").addEventListener("click", () => {
-
-  supplyOn = false;
-
-  voltageSlider.value = 0;
-  voltageSlider.disabled = true;
-
-  powerButton.classList.add("off");
-
-  powerButton.innerHTML =
-    '<span class="power-dot"></span> Turn ON Supply';
-
-  observations.length = 0;
-
-  updateSimulation();
-
-});
-
-// -------------------------------------
-// RESPONSIVE RENDERING
-// -------------------------------------
-
-function resizeRenderer() {
-
-  const width = container.clientWidth;
-  const height = container.clientHeight;
-
-  if (!width || !height) return;
-
-  camera.aspect = width / height;
-
-  camera.updateProjectionMatrix();
-
-  renderer.setSize(width, height);
-
-}
-
-window.addEventListener("resize", resizeRenderer);
-
-if ("ResizeObserver" in window) {
-
-  const observer = new ResizeObserver(resizeRenderer);
-
-  observer.observe(container);
-
-}
-
-// -------------------------------------
-// ANIMATION LOOP
-// -------------------------------------
-
-function animate() {
-
-  requestAnimationFrame(animate);
-
-  controls.update();
-
-  renderer.render(scene, camera);
-
-}
-
-updateSimulation();
-
-animate();
-
-loadingScreen.classList.add("hidden");
-
-console.log("ZENER LAB 360° - 3D Laboratory Loaded");
-
