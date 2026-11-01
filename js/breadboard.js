@@ -3,8 +3,12 @@
    ZENER-LAB-360
    FILE: js/breadboard.js
 
-   Interactive Breadboard Coordinate & Node System
+   Breadboard Coordinates
+   Electrical Nodes
+   Three.js Hole Markers
 ===================================================== */
+
+import * as THREE from 'three';
 
 export class BreadboardSystem {
 
@@ -13,19 +17,15 @@ export class BreadboardSystem {
         this.config = {
 
             rows: 30,
-
             columns: 10,
 
             holeSpacingX: 0.25,
-
             holeSpacingZ: 0.25,
 
             centerGap: 0.55,
-
             railSpacing: 0.25,
 
             startX: -1.125,
-
             startZ: -3.625,
 
             ...options
@@ -33,33 +33,20 @@ export class BreadboardSystem {
         };
 
         this.holes = new Map();
-
         this.nodes = new Map();
-
         this.components = new Map();
-
         this.connections = new Map();
 
         this.initialize();
     }
 
 
-    /* ================================================
-       INITIALIZE BOARD
-    ================================================ */
-
     initialize() {
 
         this.holes.clear();
-
         this.nodes.clear();
 
-        this.components.clear();
-
-        this.connections.clear();
-
         this.createTerminalRows();
-
         this.createPowerRails();
     }
 
@@ -96,28 +83,21 @@ export class BreadboardSystem {
 
             for (let row = 0; row < rows; row++) {
 
-                const rowId =
+                const nodeId =
                     `${group.name}-row-${row + 1}`;
 
-                const nodeId = rowId;
+                this.nodes.set(nodeId, {
+
+                    id: nodeId,
+                    type: 'terminal-row',
+                    holes: []
+
+                });
 
                 const z =
                     startZ +
                     row * holeSpacingZ +
                     group.zOffset;
-
-                this.nodes.set(nodeId, {
-
-                    id: nodeId,
-
-                    type: 'terminal-row',
-
-                    holes: [],
-
-                    connections: new Set()
-
-                });
-
 
                 for (const column of group.columns) {
 
@@ -125,29 +105,18 @@ export class BreadboardSystem {
                         startX +
                         column * holeSpacingX;
 
-                    const holeId =
-                        this.getHoleId(
-                            group.name,
-                            row + 1,
-                            column + 1
-                        );
-
                     this.addHole({
 
-                        id: holeId,
+                        id: `${group.name}-r${row + 1}-c${column + 1}`,
 
                         x,
-
                         y: 0.22,
-
                         z,
 
                         nodeId,
 
                         section: group.name,
-
                         row: row + 1,
-
                         column: column + 1,
 
                         type: 'terminal'
@@ -169,9 +138,16 @@ export class BreadboardSystem {
             rows,
             railSpacing,
             holeSpacingX,
+            holeSpacingZ,
+            centerGap,
             startX,
             startZ
         } = this.config;
+
+        const bottomZ =
+            startZ +
+            (rows - 1) * holeSpacingZ +
+            centerGap;
 
         const rails = [
 
@@ -189,68 +165,42 @@ export class BreadboardSystem {
 
             {
                 name: 'positive-bottom',
-                z:
-                    startZ +
-                    (rows - 1) *
-                    this.config.holeSpacingZ +
-                    this.config.centerGap +
-                    railSpacing,
+                z: bottomZ + railSpacing,
                 polarity: 'positive'
             },
 
             {
                 name: 'negative-bottom',
-                z:
-                    startZ +
-                    (rows - 1) *
-                    this.config.holeSpacingZ +
-                    this.config.centerGap +
-                    railSpacing * 2,
+                z: bottomZ + railSpacing * 2,
                 polarity: 'negative'
             }
 
         ];
 
-
         for (const rail of rails) {
 
-            const nodeId = rail.name;
+            this.nodes.set(rail.name, {
 
-            this.nodes.set(nodeId, {
-
-                id: nodeId,
-
+                id: rail.name,
                 type: 'power-rail',
-
                 polarity: rail.polarity,
-
-                holes: [],
-
-                connections: new Set()
+                holes: []
 
             });
 
-
             for (let column = 0; column < 5; column++) {
-
-                const x =
-                    startX +
-                    column * holeSpacingX;
-
-                const holeId =
-                    `rail-${rail.name}-${column + 1}`;
 
                 this.addHole({
 
-                    id: holeId,
+                    id: `rail-${rail.name}-${column + 1}`,
 
-                    x,
+                    x: startX + column * holeSpacingX,
 
                     y: 0.22,
 
                     z: rail.z,
 
-                    nodeId,
+                    nodeId: rail.name,
 
                     type: 'power',
 
@@ -272,24 +222,9 @@ export class BreadboardSystem {
 
         this.holes.set(hole.id, hole);
 
-        const node =
-            this.nodes.get(hole.nodeId);
-
-        if (node) {
-
-            node.holes.push(hole.id);
-
-        }
-    }
-
-
-    /* ================================================
-       HOLE ID
-    ================================================ */
-
-    getHoleId(section, row, column) {
-
-        return `${section}-r${row}-c${column}`;
+        this.nodes.get(hole.nodeId)?.holes.push(
+            hole.id
+        );
     }
 
 
@@ -297,33 +232,22 @@ export class BreadboardSystem {
        GET HOLE
     ================================================ */
 
-    getHole(holeId) {
+    getHole(id) {
 
-        return this.holes.get(holeId) || null;
+        return this.holes.get(id) || null;
     }
 
 
-    /* ================================================
-       GET HOLE POSITION
-    ================================================ */
+    getHolePosition(id) {
 
-    getHolePosition(holeId) {
+        const hole = this.getHole(id);
 
-        const hole =
-            this.getHole(holeId);
-
-        if (!hole) {
-            return null;
-        }
+        if (!hole) return null;
 
         return {
-
             x: hole.x,
-
             y: hole.y,
-
             z: hole.z
-
         };
     }
 
@@ -335,81 +259,58 @@ export class BreadboardSystem {
     findNearestHole(position, maxDistance = 0.25) {
 
         let nearest = null;
-
         let nearestDistance = Infinity;
 
         for (const hole of this.holes.values()) {
 
             const dx = position.x - hole.x;
-
             const dy = position.y - hole.y;
-
             const dz = position.z - hole.z;
 
             const distance = Math.sqrt(
-                dx * dx +
-                dy * dy +
-                dz * dz
+                dx * dx + dy * dy + dz * dz
             );
 
             if (distance < nearestDistance) {
 
                 nearestDistance = distance;
-
                 nearest = hole;
 
             }
         }
 
-        if (
-            nearest &&
-            nearestDistance <= maxDistance
-        ) {
-
-            return {
-
-                ...nearest,
-
-                distance: nearestDistance
-
-            };
+        if (!nearest || nearestDistance > maxDistance) {
+            return null;
         }
 
-        return null;
+        return {
+            ...nearest,
+            distance: nearestDistance
+        };
     }
 
 
     /* ================================================
-       REGISTER COMPONENT
+       COMPONENT REGISTRATION
     ================================================ */
 
-    registerComponent(
-        componentId,
-        terminals = []
-    ) {
+    registerComponent(componentId, terminals = []) {
 
-        if (!componentId) {
-            return false;
-        }
+        if (!componentId) return false;
 
         this.components.set(componentId, {
 
             id: componentId,
 
-            terminals: terminals.map(
-                (terminal, index) => ({
+            terminals: terminals.map((terminal, index) => ({
 
-                    id:
-                        terminal.id ||
-                        `terminal-${index + 1}`,
+                id: terminal.id || `terminal-${index + 1}`,
 
-                    holeId:
-                        terminal.holeId || null,
+                holeId: null,
 
-                    nodeId: null
+                nodeId: null
 
-                })
-            )
+            }))
 
         });
 
@@ -421,11 +322,7 @@ export class BreadboardSystem {
        PLACE COMPONENT TERMINAL
     ================================================ */
 
-    placeTerminal(
-        componentId,
-        terminalId,
-        holeId
-    ) {
+    placeTerminal(componentId, terminalId, holeId) {
 
         const component =
             this.components.get(componentId);
@@ -436,11 +333,8 @@ export class BreadboardSystem {
         if (!component || !hole) {
 
             return {
-
                 success: false,
-
-                message: 'Invalid component or breadboard hole.'
-
+                message: 'Invalid component or hole.'
             };
         }
 
@@ -452,36 +346,26 @@ export class BreadboardSystem {
         if (!terminal) {
 
             return {
-
                 success: false,
-
-                message: 'Component terminal not found.'
-
+                message: 'Terminal not found.'
             };
         }
 
         terminal.holeId = holeId;
-
         terminal.nodeId = hole.nodeId;
 
         return {
-
             success: true,
-
             componentId,
-
             terminalId,
-
             holeId,
-
             nodeId: hole.nodeId
-
         };
     }
 
 
     /* ================================================
-       CREATE JUMPER WIRE
+       WIRE CONNECTION
     ================================================ */
 
     connectHoles(
@@ -491,31 +375,30 @@ export class BreadboardSystem {
         color = 'red'
     ) {
 
-        const start =
-            this.getHole(startHoleId);
-
-        const end =
-            this.getHole(endHoleId);
+        const start = this.getHole(startHoleId);
+        const end = this.getHole(endHoleId);
 
         if (!start || !end) {
 
             return {
-
                 success: false,
-
-                message: 'One or both holes do not exist.'
-
+                message: 'Invalid hole selection.'
             };
         }
 
         if (startHoleId === endHoleId) {
 
             return {
-
                 success: false,
+                message: 'Select two different holes.'
+            };
+        }
 
-                message: 'Cannot connect a hole to itself.'
+        if (this.connections.has(connectionId)) {
 
+            return {
+                success: false,
+                message: 'Connection ID already exists.'
             };
         }
 
@@ -524,42 +407,47 @@ export class BreadboardSystem {
             id: connectionId,
 
             startHoleId,
-
             endHoleId,
 
             startNode: start.nodeId,
-
             endNode: end.nodeId,
 
             color,
-
             type: 'jumper-wire'
 
         });
 
         return {
-
             success: true,
-
             connectionId,
-
             startNode: start.nodeId,
-
             endNode: end.nodeId
-
         };
     }
 
 
     /* ================================================
-       REMOVE CONNECTION
+       REMOVE WIRE
     ================================================ */
 
     removeConnection(connectionId) {
 
-        return this.connections.delete(
-            connectionId
-        );
+        return this.connections.delete(connectionId);
+    }
+
+
+    /* ================================================
+       CHECK SAME NODE
+    ================================================ */
+
+    areSameNode(firstHoleId, secondHoleId) {
+
+        const first = this.getHole(firstHoleId);
+        const second = this.getHole(secondHoleId);
+
+        if (!first || !second) return false;
+
+        return first.nodeId === second.nodeId;
     }
 
 
@@ -569,7 +457,7 @@ export class BreadboardSystem {
 
     getNodeConnections(nodeId) {
 
-        const result = [];
+        const results = [];
 
         for (const component of this.components.values()) {
 
@@ -577,7 +465,7 @@ export class BreadboardSystem {
 
                 if (terminal.nodeId === nodeId) {
 
-                    result.push({
+                    results.push({
 
                         type: 'component',
 
@@ -597,7 +485,7 @@ export class BreadboardSystem {
                 wire.endNode === nodeId
             ) {
 
-                result.push({
+                results.push({
 
                     type: 'wire',
 
@@ -607,32 +495,12 @@ export class BreadboardSystem {
             }
         }
 
-        return result;
+        return results;
     }
 
 
     /* ================================================
-       ELECTRICAL NODE CHECK
-    ================================================ */
-
-    areSameNode(firstHoleId, secondHoleId) {
-
-        const first =
-            this.getHole(firstHoleId);
-
-        const second =
-            this.getHole(secondHoleId);
-
-        if (!first || !second) {
-            return false;
-        }
-
-        return first.nodeId === second.nodeId;
-    }
-
-
-    /* ================================================
-       GET BOARD DATA
+       BOARD INFORMATION
     ================================================ */
 
     getBoardData() {
@@ -643,11 +511,9 @@ export class BreadboardSystem {
 
             totalNodes: this.nodes.size,
 
-            totalComponents:
-                this.components.size,
+            totalComponents: this.components.size,
 
-            totalConnections:
-                this.connections.size
+            totalConnections: this.connections.size
 
         };
     }
@@ -660,7 +526,6 @@ export class BreadboardSystem {
     reset() {
 
         this.components.clear();
-
         this.connections.clear();
 
         this.initialize();
@@ -670,7 +535,7 @@ export class BreadboardSystem {
 
 
 /* =====================================================
-   CREATE THREE.JS HOLE MARKERS
+   THREE.JS HOLE MARKERS
 ===================================================== */
 
 export function createHoleMarkers(
@@ -679,13 +544,100 @@ export function createHoleMarkers(
 ) {
 
     const board =
-        new BreadboardSystem();
+        options.board || new BreadboardSystem();
 
-    const group =
-        new THREE_GROUP_PLACEHOLDER();
+    const group = new THREE.Group();
+
+    group.name = 'BreadboardHoleMarkers';
+
+    const geometry =
+        new THREE.CylinderGeometry(
+            0.035,
+            0.035,
+            0.012,
+            12
+        );
+
+    const material =
+        new THREE.MeshBasicMaterial({
+
+            color: options.color || '#94a3b8',
+
+            transparent: true,
+
+            opacity: options.opacity ?? 0.75
+
+        });
+
+    const markers = new Map();
+
+    for (const hole of board.holes.values()) {
+
+        const marker =
+            new THREE.Mesh(
+                geometry,
+                material.clone()
+            );
+
+        marker.position.set(
+            hole.x,
+            hole.y,
+            hole.z
+        );
+
+        marker.rotation.x =
+            Math.PI / 2;
+
+        marker.userData.holeId = hole.id;
+
+        marker.userData.nodeId = hole.nodeId;
+
+        marker.userData.isBreadboardHole = true;
+
+        marker.visible =
+            options.visible ?? true;
+
+        group.add(marker);
+
+        markers.set(hole.id, marker);
+    }
+
+    scene.add(group);
 
     return {
+
         board,
-        group
+
+        group,
+
+        markers,
+
+        setVisible(visible) {
+
+            group.visible = Boolean(visible);
+
+        },
+
+        getMarker(holeId) {
+
+            return markers.get(holeId) || null;
+
+        },
+
+        dispose() {
+
+            scene.remove(group);
+
+            geometry.dispose();
+
+            for (const marker of markers.values()) {
+
+                marker.material.dispose();
+
+            }
+
+            markers.clear();
+        }
+
     };
 }
