@@ -1,106 +1,85 @@
 
-/* =========================================
+/* =====================================================
    ZENER-LAB-360
-   FILE: graph.js
+   FILE: js/graph.js
 
-   V-I Characteristics & Load Regulation
-   Canvas Graph Engine
-========================================= */
+   Interactive Experiment Graph
+   Forward Bias | Reverse Bias | Load Regulation
+===================================================== */
 
 export class ExperimentGraph {
 
-    constructor(canvas, options = {}) {
-
-        if (typeof canvas === 'string') {
-            canvas = document.querySelector(canvas);
-        }
-
-        if (!canvas) {
-            throw new Error(
-                'Graph canvas element not found.'
-            );
-        }
+    constructor(canvas) {
 
         this.canvas = canvas;
 
-        this.ctx = canvas.getContext('2d');
+        if (!this.canvas) {
+            throw new Error('Graph canvas not found.');
+        }
 
-        this.options = {
-
-            background: '#101b2b',
-
-            gridColor: 'rgba(148, 163, 184, 0.13)',
-
-            axisColor: '#94a3b8',
-
-            textColor: '#cbd5e1',
-
-            lineColor: '#22d3ee',
-
-            pointColor: '#facc15',
-
-            padding: {
-                top: 35,
-                right: 25,
-                bottom: 55,
-                left: 65
-            },
-
-            ...options
-        };
-
-        this.data = [];
+        this.ctx = this.canvas.getContext('2d');
 
         this.graphType = 'vi';
 
-        this.labels = {
-            x: 'Diode Voltage (V)',
-            y: 'Current (mA)'
-        };
+        this.data = [];
 
         this.resizeObserver = null;
 
-        this.setupResizeObserver();
-
-        this.resize();
+        this.init();
     }
 
 
-    /* =====================================
-       1. RESIZE CANVAS
-    ===================================== */
+    /* ================================================
+       INITIALIZE
+    ================================================ */
 
-    resize() {
+    init() {
+
+        this.resizeCanvas();
+
+        if (typeof ResizeObserver !== 'undefined') {
+
+            this.resizeObserver =
+                new ResizeObserver(() => {
+                    this.resizeCanvas();
+                });
+
+            this.resizeObserver.observe(this.canvas);
+        }
+
+        this.draw();
+    }
+
+
+    /* ================================================
+       RESIZE CANVAS
+    ================================================ */
+
+    resizeCanvas() {
 
         const rect =
             this.canvas.getBoundingClientRect();
 
-        const width = Math.max(
-            300,
-            rect.width || 600
-        );
+        const width =
+            Math.max(300, rect.width);
 
-        const height = Math.max(
-            220,
-            rect.height || 320
-        );
+        const height =
+            Math.max(220, rect.height || 300);
 
-        const pixelRatio = Math.min(
-            window.devicePixelRatio || 1,
-            2
-        );
+        const dpr =
+            Math.min(window.devicePixelRatio || 1, 2);
 
         this.canvas.width =
-            Math.round(width * pixelRatio);
+            Math.round(width * dpr);
 
         this.canvas.height =
-            Math.round(height * pixelRatio);
+            Math.round(height * dpr);
 
         this.ctx.setTransform(
-            pixelRatio,
+            dpr,
             0,
             0,
-            pixelRatio,
+            dpr,
             0,
             0
         );
@@ -109,99 +88,17 @@ export class ExperimentGraph {
 
         this.height = height;
 
-        if (this.data.length) {
-            this.draw();
-        }
+        this.draw();
     }
 
 
-    /* =====================================
-       2. OBSERVE CANVAS SIZE
-    ===================================== */
-
-    setupResizeObserver() {
-
-        if (!window.ResizeObserver) {
-            return;
-        }
-
-        this.resizeObserver =
-            new ResizeObserver(() => {
-                this.resize();
-            });
-
-        this.resizeObserver.observe(
-            this.canvas
-        );
-    }
-
-
-    /* =====================================
-       3. SET GRAPH TYPE
-    ===================================== */
+    /* ================================================
+       SET GRAPH TYPE
+    ================================================ */
 
     setGraphType(type) {
 
-        const supported = [
-            'vi',
-            'load'
-        ];
-
-        if (!supported.includes(type)) {
-            throw new Error(
-                `Unsupported graph type: ${type}`
-            );
-        }
-
         this.graphType = type;
-
-        if (type === 'vi') {
-
-            this.labels = {
-                x: 'Diode Voltage (V)',
-                y: 'Current (mA)'
-            };
-        }
-
-        else {
-
-            this.labels = {
-                x: 'Load Resistance (Ω)',
-                y: 'Output Voltage (V)'
-            };
-        }
-
-        return this;
-    }
-
-
-    /* =====================================
-       4. SET GRAPH DATA
-    ===================================== */
-
-    setData(data = []) {
-
-        if (!Array.isArray(data)) {
-            throw new Error(
-                'Graph data must be an array.'
-            );
-        }
-
-        this.data = data.filter(point => {
-
-            const x = this.graphType === 'vi'
-                ? point.voltage
-                : point.resistance;
-
-            const y = this.graphType === 'vi'
-                ? point.current
-                : point.outputVoltage;
-
-            return (
-                Number.isFinite(Number(x)) &&
-                Number.isFinite(Number(y))
-            );
-        });
 
         this.draw();
 
@@ -209,43 +106,155 @@ export class ExperimentGraph {
     }
 
 
-    /* =====================================
-       5. CALCULATE DATA RANGE
-    ===================================== */
+    /* ================================================
+       SET DATA
+    ================================================ */
 
-    getDataRange() {
+    setData(data = []) {
+
+        this.data =
+            Array.isArray(data) ? data : [];
+
+        this.draw();
+
+        return this;
+    }
+
+
+    /* ================================================
+       CLEAR GRAPH
+    ================================================ */
+
+    clear() {
+
+        this.data = [];
+
+        this.draw();
+
+        return this;
+    }
+
+
+    /* ================================================
+       MAIN DRAW
+    ================================================ */
+
+    draw() {
+
+        if (!this.ctx || !this.width) {
+            return;
+        }
+
+        const ctx = this.ctx;
+
+        const width = this.width;
+
+        const height = this.height;
+
+        ctx.clearRect(0, 0, width, height);
+
+        ctx.fillStyle = '#101827';
+
+        ctx.fillRect(0, 0, width, height);
+
+        const margin = {
+
+            top: 35,
+
+            right: 24,
+
+            bottom: 58,
+
+            left: 65
+
+        };
+
+        const plot = {
+
+            x: margin.left,
+
+            y: margin.top,
+
+            width:
+                width - margin.left - margin.right,
+
+            height:
+                height - margin.top - margin.bottom
+
+        };
+
+        this.drawTitle(ctx, width);
 
         if (!this.data.length) {
 
-            return {
-                minX: 0,
-                maxX: 12,
-                minY: 0,
-                maxY: 20
-            };
+            this.drawEmptyMessage(
+                ctx,
+                plot
+            );
+
+            return;
         }
 
-        const xValues = this.data.map(point => {
+        const values =
+            this.getGraphValues();
 
-            return Number(
-                this.graphType === 'vi'
-                    ? point.voltage
-                    : point.resistance
-            );
+        this.drawGrid(
+            ctx,
+            plot,
+            values
+        );
 
-        });
+        this.drawAxes(
+            ctx,
+            plot,
+            values
+        );
 
-        const yValues = this.data.map(point => {
+        this.drawData(
+            ctx,
+            plot,
+            values
+        );
 
-            return Number(
-                this.graphType === 'vi'
-                    ? point.current
-                    : point.outputVoltage
-            );
+        this.drawAxisLabels(
+            ctx,
+            plot
+        );
+    }
 
-        });
 
-        const minX = Math.min(0, ...xValues);
+    /* ================================================
+       GRAPH VALUES
+    ================================================ */
+
+    getGraphValues() {
+
+        const isLoad =
+            this.graphType === 'load';
+
+        const xValues =
+            this.data.map(item => {
+
+                return Number(
+                    isLoad
+                        ? item.loadResistance ?? item.resistance
+                        : item.voltage ?? item.inputVoltage ?? 0
+                );
+
+            });
+
+        const yValues =
+            this.data.map(item => {
+
+                return Number(
+                    isLoad
+                        ? item.outputVoltage ?? item.voltage
+                        : item.currentMilliampere ?? item.current ?? 0
+                );
+
+            });
+
+        const minX = Math.min(...xValues);
 
         const maxX = Math.max(...xValues);
 
@@ -257,432 +266,361 @@ export class ExperimentGraph {
 
             minX,
 
-            maxX: maxX === minX
-                ? maxX + 1
-                : maxX * 1.1,
+            maxX: maxX === minX ? minX + 1 : maxX,
 
             minY,
 
-            maxY: maxY === minY
-                ? maxY + 1
-                : maxY * 1.1
+            maxY: maxY === minY ? minY + 1 : maxY * 1.12
+
         };
     }
 
 
-    /* =====================================
-       6. DRAW BACKGROUND
-    ===================================== */
+    /* ================================================
+       TITLE
+    ================================================ */
 
-    drawBackground() {
+    drawTitle(ctx, width) {
 
-        const ctx = this.ctx;
+        ctx.save();
 
-        ctx.clearRect(
-            0,
-            0,
-            this.width,
-            this.height
-        );
+        ctx.fillStyle = '#e5f3ff';
 
-        ctx.fillStyle =
-            this.options.background;
-
-        ctx.fillRect(
-            0,
-            0,
-            this.width,
-            this.height
-        );
-    }
-
-
-    /* =====================================
-       7. DRAW GRID
-    ===================================== */
-
-    drawGrid(range, plot) {
-
-        const ctx = this.ctx;
-
-        const divisions = 6;
-
-        ctx.strokeStyle =
-            this.options.gridColor;
-
-        ctx.lineWidth = 1;
-
-        ctx.fillStyle =
-            this.options.textColor;
-
-        ctx.font = '11px Arial';
-
-        for (let i = 0; i <= divisions; i++) {
-
-            const x =
-                plot.left +
-                (plot.width / divisions) * i;
-
-            const y =
-                plot.top +
-                (plot.height / divisions) * i;
-
-            // Vertical grid
-            ctx.beginPath();
-
-            ctx.moveTo(x, plot.top);
-
-            ctx.lineTo(
-                x,
-                plot.top + plot.height
-            );
-
-            ctx.stroke();
-
-            // Horizontal grid
-            ctx.beginPath();
-
-            ctx.moveTo(plot.left, y);
-
-            ctx.lineTo(
-                plot.left + plot.width,
-                y
-            );
-
-            ctx.stroke();
-
-            const xValue =
-                range.minX +
-                ((range.maxX - range.minX) / divisions) * i;
-
-            const yValue =
-                range.maxY -
-                ((range.maxY - range.minY) / divisions) * i;
-
-            ctx.textAlign = 'center';
-
-            ctx.fillText(
-                xValue.toFixed(1),
-                x,
-                plot.top + plot.height + 19
-            );
-
-            ctx.textAlign = 'right';
-
-            ctx.fillText(
-                yValue.toFixed(1),
-                plot.left - 9,
-                y + 4
-            );
-        }
-    }
-
-
-    /* =====================================
-       8. DRAW AXES
-    ===================================== */
-
-    drawAxes(plot) {
-
-        const ctx = this.ctx;
-
-        ctx.strokeStyle =
-            this.options.axisColor;
-
-        ctx.lineWidth = 1.5;
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            plot.left,
-            plot.top
-        );
-
-        ctx.lineTo(
-            plot.left,
-            plot.top + plot.height
-        );
-
-        ctx.lineTo(
-            plot.left + plot.width,
-            plot.top + plot.height
-        );
-
-        ctx.stroke();
-
-
-        // X-axis label
-        ctx.fillStyle =
-            this.options.textColor;
-
-        ctx.font = '12px Arial';
+        ctx.font = '600 14px Arial';
 
         ctx.textAlign = 'center';
 
         ctx.fillText(
-            this.labels.x,
-            plot.left + plot.width / 2,
-            this.height - 10
-        );
 
+            this.graphType === 'load'
+                ? 'LOAD REGULATION CHARACTERISTICS'
+                : 'ZENER DIODE V-I CHARACTERISTICS',
 
-        // Y-axis label
-        ctx.save();
+            width / 2,
 
-        ctx.translate(
-            15,
-            plot.top + plot.height / 2
-        );
+            19
 
-        ctx.rotate(-Math.PI / 2);
-
-        ctx.fillText(
-            this.labels.y,
-            0,
-            0
         );
 
         ctx.restore();
     }
 
 
-    /* =====================================
-       9. CONVERT DATA TO CANVAS POSITION
-    ===================================== */
+    /* ================================================
+       GRID
+    ================================================ */
 
-    mapPoint(x, y, range, plot) {
+    drawGrid(ctx, plot, values) {
 
-        const canvasX =
-            plot.left +
-            ((x - range.minX) /
-                (range.maxX - range.minX)) *
-            plot.width;
+        ctx.save();
 
-        const canvasY =
-            plot.top +
-            plot.height -
-            ((y - range.minY) /
-                (range.maxY - range.minY)) *
-            plot.height;
+        ctx.strokeStyle = '#26364b';
 
-        return {
-            x: canvasX,
-            y: canvasY
-        };
+        ctx.lineWidth = 1;
+
+        ctx.fillStyle = '#a7b7cb';
+
+        ctx.font = '11px Arial';
+
+        const divisions = 5;
+
+        for (let i = 0; i <= divisions; i++) {
+
+            const x =
+                plot.x +
+                (plot.width / divisions) * i;
+
+            const y =
+                plot.y +
+                (plot.height / divisions) * i;
+
+            ctx.beginPath();
+
+            ctx.moveTo(x, plot.y);
+
+            ctx.lineTo(x, plot.y + plot.height);
+
+            ctx.stroke();
+
+
+            ctx.beginPath();
+
+            ctx.moveTo(plot.x, y);
+
+            ctx.lineTo(plot.x + plot.width, y);
+
+            ctx.stroke();
+
+
+            const xValue =
+                values.minX +
+                (values.maxX - values.minX) *
+                i / divisions;
+
+            const yValue =
+                values.maxY -
+                (values.maxY - values.minY) *
+                i / divisions;
+
+            ctx.textAlign = 'center';
+
+            ctx.fillText(
+                this.formatNumber(xValue),
+                x,
+                plot.y + plot.height + 17
+            );
+
+            ctx.textAlign = 'right';
+
+            ctx.fillText(
+                this.formatNumber(yValue),
+                plot.x - 9,
+                y + 4
+            );
+        }
+
+        ctx.restore();
     }
 
 
-    /* =====================================
-       10. DRAW DATA LINE
-    ===================================== */
+    /* ================================================
+       AXES
+    ================================================ */
 
-    drawLine(range, plot) {
+    drawAxes(ctx, plot) {
 
-        if (this.data.length < 2) {
-            return;
-        }
+        ctx.save();
 
-        const ctx = this.ctx;
+        ctx.strokeStyle = '#9aacc4';
+
+        ctx.lineWidth = 1.5;
 
         ctx.beginPath();
 
-        this.data.forEach((point, index) => {
+        ctx.moveTo(plot.x, plot.y);
 
-            const x = this.graphType === 'vi'
-                ? Number(point.voltage)
-                : Number(point.resistance);
+        ctx.lineTo(
+            plot.x,
+            plot.y + plot.height
+        );
 
-            const y = this.graphType === 'vi'
-                ? Number(point.current)
-                : Number(point.outputVoltage);
+        ctx.lineTo(
+            plot.x + plot.width,
+            plot.y + plot.height
+        );
 
-            const mapped = this.mapPoint(
-                x,
-                y,
-                range,
-                plot
-            );
+        ctx.stroke();
 
-            if (index === 0) {
-                ctx.moveTo(
-                    mapped.x,
-                    mapped.y
+        ctx.restore();
+    }
+
+
+    /* ================================================
+       DATA LINE AND POINTS
+    ================================================ */
+
+    drawData(ctx, plot, values) {
+
+        const isLoad =
+            this.graphType === 'load';
+
+        const points = this.data.map(item => {
+
+            const xValue =
+                Number(
+                    isLoad
+                        ? item.loadResistance ?? item.resistance
+                        : item.voltage ?? item.inputVoltage ?? 0
                 );
-            }
 
-            else {
-                ctx.lineTo(
-                    mapped.x,
-                    mapped.y
+            const yValue =
+                Number(
+                    isLoad
+                        ? item.outputVoltage ?? item.voltage
+                        : item.currentMilliampere ?? item.current ?? 0
                 );
-            }
+
+            return {
+
+                x:
+                    plot.x +
+                    (
+                        (xValue - values.minX) /
+                        (values.maxX - values.minX)
+                    ) * plot.width,
+
+                y:
+                    plot.y +
+                    plot.height -
+                    (
+                        (yValue - values.minY) /
+                        (values.maxY - values.minY)
+                    ) * plot.height
+
+            };
+
         });
 
-        ctx.strokeStyle =
-            this.options.lineColor;
+
+        ctx.save();
+
+        ctx.strokeStyle = '#22d3ee';
 
         ctx.lineWidth = 2.5;
 
         ctx.lineJoin = 'round';
 
-        ctx.lineCap = 'round';
+        ctx.beginPath();
+
+        points.forEach((point, index) => {
+
+            if (index === 0) {
+
+                ctx.moveTo(
+                    point.x,
+                    point.y
+                );
+
+            } else {
+
+                ctx.lineTo(
+                    point.x,
+                    point.y
+                );
+
+            }
+
+        });
 
         ctx.stroke();
-    }
 
 
-    /* =====================================
-       11. DRAW DATA POINTS
-    ===================================== */
+        ctx.fillStyle = '#67e8f9';
 
-    drawPoints(range, plot) {
-
-        const ctx = this.ctx;
-
-        this.data.forEach(point => {
-
-            const x = this.graphType === 'vi'
-                ? Number(point.voltage)
-                : Number(point.resistance);
-
-            const y = this.graphType === 'vi'
-                ? Number(point.current)
-                : Number(point.outputVoltage);
-
-            const mapped = this.mapPoint(
-                x,
-                y,
-                range,
-                plot
-            );
+        points.forEach(point => {
 
             ctx.beginPath();
 
             ctx.arc(
-                mapped.x,
-                mapped.y,
+                point.x,
+                point.y,
                 3,
                 0,
                 Math.PI * 2
             );
 
-            ctx.fillStyle =
-                this.options.pointColor;
-
             ctx.fill();
+
         });
+
+        ctx.restore();
     }
 
 
-    /* =====================================
-       12. DRAW EMPTY STATE
-    ===================================== */
+    /* ================================================
+       AXIS LABELS
+    ================================================ */
 
-    drawEmptyState() {
+    drawAxisLabels(ctx, plot) {
 
-        const ctx = this.ctx;
+        ctx.save();
 
-        ctx.fillStyle =
-            this.options.textColor;
+        ctx.fillStyle = '#d6e5f5';
 
-        ctx.font = '14px Arial';
+        ctx.font = '12px Arial';
 
         ctx.textAlign = 'center';
 
         ctx.fillText(
-            'Run the experiment to generate graph data.',
-            this.width / 2,
-            this.height / 2
+
+            this.graphType === 'load'
+                ? 'Load Resistance (Ω)'
+                : 'Input Voltage (V)',
+
+            plot.x + plot.width / 2,
+
+            this.height - 12
+
         );
+
+
+        ctx.translate(
+            15,
+            plot.y + plot.height / 2
+        );
+
+        ctx.rotate(-Math.PI / 2);
+
+        ctx.fillText(
+
+            this.graphType === 'load'
+                ? 'Output Voltage (V)'
+                : 'Diode Current (mA)',
+
+            0,
+            0
+
+        );
+
+        ctx.restore();
     }
 
 
-    /* =====================================
-       13. DRAW COMPLETE GRAPH
-    ===================================== */
+    /* ================================================
+       EMPTY GRAPH MESSAGE
+    ================================================ */
 
-    draw() {
+    drawEmptyMessage(ctx, plot) {
 
-        if (!this.ctx) {
-            return;
-        }
+        ctx.save();
 
-        this.drawBackground();
+        ctx.fillStyle = '#93a4b8';
 
-        if (!this.width || !this.height) {
-            return;
-        }
+        ctx.font = '13px Arial';
 
-        if (!this.data.length) {
+        ctx.textAlign = 'center';
 
-            this.drawEmptyState();
+        ctx.fillText(
 
-            return;
-        }
+            'Run the experiment to generate graph data',
 
-        const padding =
-            this.options.padding;
+            plot.x + plot.width / 2,
 
-        const plot = {
+            plot.y + plot.height / 2
 
-            left: padding.left,
-
-            top: padding.top,
-
-            width:
-                this.width -
-                padding.left -
-                padding.right,
-
-            height:
-                this.height -
-                padding.top -
-                padding.bottom
-        };
-
-        if (
-            plot.width <= 0 ||
-            plot.height <= 0
-        ) {
-            return;
-        }
-
-        const range = this.getDataRange();
-
-        this.drawGrid(
-            range,
-            plot
         );
 
-        this.drawAxes(plot);
-
-        this.drawLine(
-            range,
-            plot
-        );
-
-        this.drawPoints(
-            range,
-            plot
-        );
+        ctx.restore();
     }
 
 
-    /* =====================================
-       14. CLEAR GRAPH
-    ===================================== */
+    /* ================================================
+       NUMBER FORMAT
+    ================================================ */
 
-    clear() {
+    formatNumber(value) {
 
-        this.data = [];
+        if (!Number.isFinite(value)) {
+            return '0';
+        }
 
-        this.draw();
+        if (Math.abs(value) >= 1000) {
+
+            return value.toFixed(0);
+        }
+
+        if (Math.abs(value) >= 10) {
+
+            return value.toFixed(1);
+        }
+
+        return value.toFixed(2);
     }
 
 
-    /* =====================================
-       15. DESTROY GRAPH
-    ===================================== */
+    /* ================================================
+       DESTROY
+    ================================================ */
 
     destroy() {
 
@@ -693,26 +631,14 @@ export class ExperimentGraph {
             this.resizeObserver = null;
         }
 
-        this.clear();
+        this.data = [];
+
+        this.ctx.clearRect(
+            0,
+            0,
+            this.canvas.width,
+            this.canvas.height
+        );
     }
+
 }
-
-
-/* =========================================
-   FACTORY FUNCTION
-========================================= */
-
-export function createGraph(
-    canvas,
-    options = {}
-) {
-
-    return new ExperimentGraph(
-        canvas,
-        options
-    );
-}
-
-
-export default ExperimentGraph;
-
