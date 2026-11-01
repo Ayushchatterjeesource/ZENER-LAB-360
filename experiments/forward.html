@@ -1,1 +1,205 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#101820">
+
+  <title>Forward Bias | ZENER LAB 360°</title>
+
+  <link rel="stylesheet" href="../css/laboratory.css">
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+
+<body>
+
+  <header class="lab-header">
+    <a href="../index.html" class="lab-brand">
+      <span class="brand-symbol">⚡</span>
+      <span>
+        <strong>ZENER LAB <em>360°</em></strong>
+        <small>VIRTUAL ELECTRONICS LABORATORY</small>
+      </span>
+    </a>
+
+    <div class="experiment-heading">
+      <span>EXPERIMENT 01</span>
+      <strong>Forward Bias Characteristics</strong>
+    </div>
+
+    <a href="../index.html" class="back-btn">← Dashboard</a>
+  </header>
+
+  <main class="lab-layout">
+
+    <section class="viewport-section">
+
+      <div class="viewport-heading">
+        <div>
+          <span class="eyebrow">3D WORKBENCH</span>
+          <h1>Electronics Laboratory</h1>
+        </div>
+
+        <span class="live-status">
+          <i></i> 3D ENVIRONMENT ACTIVE
+        </span>
+      </div>
+
+      <div class="viewport-wrapper">
+
+        <div id="three-container"></div>
+
+        <div class="viewport-tools">
+          <button id="topView" title="Top View">Top</button>
+          <button id="resetView" title="Reset Camera">Reset</button>
+          <button id="rotateView" title="Auto Rotate">360°</button>
+        </div>
+
+        <div class="viewport-help">
+          <span>🖱 Drag to rotate</span>
+          <span>Scroll to zoom</span>
+          <span>Click a component to inspect</span>
+        </div>
+
+        <div class="loading-screen" id="loadingScreen">
+          <div class="loader"></div>
+          <p>Preparing 3D Laboratory...</p>
+        </div>
+
+      </div>
+
+      <div class="instrument-strip">
+
+        <div class="instrument-item">
+          <span class="instrument-icon">⚡</span>
+          <div>
+            <small>POWER SUPPLY</small>
+            <strong id="supplyDisplay">0.0 V</strong>
+          </div>
+        </div>
+
+        <div class="instrument-item">
+          <span class="instrument-icon">A</span>
+          <div>
+            <small>AMMETER</small>
+            <strong id="currentDisplay">0.00 mA</strong>
+          </div>
+        </div>
+
+        <div class="instrument-item">
+          <span class="instrument-icon">V</span>
+          <div>
+            <small>VOLTMETER</small>
+            <strong id="diodeDisplay">0.00 V</strong>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <aside class="control-panel">
+
+      <div class="panel-title">
+        <span class="eyebrow">LAB CONTROL</span>
+        <h2>Experiment Panel</h2>
+      </div>
+
+      <div class="experiment-info">
+        <span class="info-label">CURRENT EXPERIMENT</span>
+        <h3>Zener Diode</h3>
+        <p>Forward Bias V-I Characteristics</p>
+      </div>
+
+      <div class="panel-section">
+        <h3>Power Supply Control</h3>
+
+        <div class="value-display">
+          <span>DC Voltage</span>
+          <strong id="voltageValue">0.0 V</strong>
+        </div>
+
+        <input
+          type="range"
+          id="voltageSlider"
+          min="0"
+          max="12"
+          step="0.1"
+          value="0"
+        >
+
+        <div class="range-labels">
+          <span>0 V</span>
+          <span>12 V</span>
+        </div>
+
+        <button class="power-btn" id="powerBtn">
+          <span class="power-dot"></span>
+          Turn ON Supply
+        </button>
+      </div>
+
+      <div class="panel-section">
+        <h3>Live Measurements</h3>
+
+        <div class="reading-card">
+          <span>Diode Forward Voltage</span>
+          <strong id="forwardVoltage">0.00 V</strong>
+        </div>
+
+        <div class="reading-card">
+          <span>Forward Current</span>
+          <strong id="forwardCurrent">0.00 mA</strong>
+        </div>
+
+        <div class="reading-card">
+          <span>Series Resistance</span>
+          <strong>1 kΩ</strong>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h3>Component Information</h3>
+
+        <div class="component-info" id="componentInfo">
+          <span class="component-icon">◉</span>
+          <strong>Select a component</strong>
+          <p>Click any 3D component to view its details.</p>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h3>Experiment Actions</h3>
+
+        <button class="action-btn" id="recordBtn">
+          + Record Observation
+        </button>
+
+        <button class="reset-btn" id="resetSimulation">
+          ↻ Reset Experiment
+        </button>
+
+        <p class="simulation-note">
+          Educational simulation only. Verify circuit connections
+          and component ratings before real-world use.
+        </p>
+      </div>
+
+    </aside>
+
+  </main>
+
+  <script type="module" src="../js/laboratory.js"></script>
+
+</body>
+</html>
+
