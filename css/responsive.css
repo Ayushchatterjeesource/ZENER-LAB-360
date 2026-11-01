@@ -1,1 +1,273 @@
 
+/* =========================================
+   ZENER-LAB-360
+   Responsive Laboratory Stylesheet
+   Mobile | Tablet | Desktop
+========================================= */
+
+/* ---------- Large Laptop ---------- */
+@media (max-width: 1200px) {
+    .lab-main {
+        grid-template-columns: 220px minmax(0, 1fr);
+        gap: 16px;
+        padding: 18px;
+    }
+
+    .lab-sidebar {
+        padding: 16px;
+    }
+
+    .lab-workspace {
+        min-width: 0;
+    }
+
+    .three-container {
+        min-height: 440px;
+    }
+}
+
+/* ---------- Tablet ---------- */
+@media (max-width: 900px) {
+    .lab-navbar {
+        padding: 12px 18px;
+    }
+
+    .lab-main {
+        grid-template-columns: 1fr;
+        padding: 16px;
+    }
+
+    .lab-sidebar {
+        position: static;
+        width: 100%;
+    }
+
+    .lab-sidebar nav,
+    .lab-sidebar .experiment-menu {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .lab-sidebar a {
+        flex: 1 1 150px;
+    }
+
+    .lab-workspace {
+        width: 100%;
+    }
+
+    .workspace-header {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .three-container {
+        width: 100%;
+        min-height: 420px;
+    }
+
+    .measurement-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .control-grid,
+    .tools-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 600px) {
+    .lab-navbar {
+        min-height: 58px;
+        padding: 10px 12px;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .lab-navbar .logo {
+        font-size: 17px;
+    }
+
+    .lab-navbar nav {
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .lab-navbar nav a {
+        font-size: 12px;
+    }
+
+    .lab-page-title {
+        display: none;
+    }
+
+    .lab-main {
+        padding: 12px;
+        gap: 14px;
+    }
+
+    .lab-sidebar {
+        padding: 13px;
+        border-radius: 12px;
+    }
+
+    .lab-sidebar h3 {
+        font-size: 15px;
+    }
+
+    .lab-sidebar a {
+        flex: 1 1 120px;
+        padding: 10px;
+        font-size: 12px;
+    }
+
+    .workspace-header {
+        align-items: flex-start;
+    }
+
+    .workspace-header h1 {
+        font-size: 21px;
+    }
+
+    .workspace-header p {
+        font-size: 12px;
+    }
+
+    .three-container {
+        min-height: 350px;
+        height: 350px;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .three-container canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+    }
+
+    .component-info {
+        max-width: calc(100% - 20px);
+        font-size: 12px;
+    }
+
+    .control-card {
+        padding: 13px;
+    }
+
+    .control-card h3 {
+        font-size: 15px;
+    }
+
+    .control-card button,
+    .control-card input {
+        max-width: 100%;
+    }
+
+    .measurement-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+    }
+
+    .measurement-card {
+        padding: 12px;
+        min-width: 0;
+    }
+
+    .measurement-card h3 {
+        font-size: 12px;
+    }
+
+    .measurement-card .value {
+        font-size: 20px;
+    }
+
+    .graph-container {
+        padding: 12px;
+        overflow: hidden;
+    }
+
+    .graph-container canvas {
+        max-width: 100%;
+    }
+
+    .observation-table {
+        overflow-x: auto;
+    }
+
+    .observation-table table {
+        min-width: 520px;
+    }
+
+    .viva-placeholder {
+        padding: 16px;
+    }
+
+    .lab-footer {
+        padding: 18px 12px;
+        text-align: center;
+    }
+}
+
+/* ---------- Small Mobile ---------- */
+@media (max-width: 420px) {
+    .lab-main {
+        padding: 9px;
+    }
+
+    .three-container {
+        height: 310px;
+        min-height: 310px;
+    }
+
+    .measurement-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 7px;
+    }
+
+    .measurement-card {
+        padding: 9px;
+    }
+
+    .measurement-card .value {
+        font-size: 17px;
+    }
+
+    .control-grid,
+    .tools-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .workspace-header h1 {
+        font-size: 19px;
+    }
+
+    .lab-sidebar a {
+        flex-basis: 100%;
+    }
+}
+
+/* ---------- Landscape Mobile ---------- */
+@media (max-width: 900px) and (orientation: landscape) {
+    .three-container {
+        height: 380px;
+        min-height: 380px;
+    }
+}
+
+/* ---------- Accessibility ---------- */
+@media (prefers-reduced-motion: reduce) {
+    .lab-main *,
+    .lab-main *::before,
+    .lab-main *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
