@@ -1,444 +1,132 @@
 
-/* =========================================
+/* =====================================================
    ZENER-LAB-360
-   FILE: simulation.js
+   FILE: js/simulation.js
 
-   Educational Zener Diode Simulation Engine
-========================================= */
+   Educational Zener Diode Simulation
+   Modes:
+   1. Forward Bias
+   2. Reverse Bias
+   3. Load Regulation
 
-
-/* ---------- Default Configuration ---------- */
-
-export const DEFAULT_CONFIG = {
-
-    supplyVoltage: 0,
-
-    seriesResistance: 1000,
-
-    loadResistance: 1000,
-
-    zenerVoltage: 5.1,
-
-    forwardVoltage: 0.7,
-
-    zenerResistance: 8,
-
-    maxCurrent: 0.05
-};
-
-
-/* ---------- Utility Functions ---------- */
-
-function clamp(value, min, max) {
-
-    return Math.min(
-        Math.max(value, min),
-        max
-    );
-}
-
-
-function round(value, digits = 3) {
-
-    const factor = 10 ** digits;
-
-    return Math.round(
-        value * factor
-    ) / factor;
-}
-
-
-/* =========================================
-   ZENER SIMULATION CLASS
-========================================= */
+   Simplified educational model.
+   Not a replacement for physical lab measurements.
+===================================================== */
 
 export class ZenerSimulation {
 
-    constructor(config = {}) {
+    constructor(options = {}) {
 
-        this.config = {
-            ...DEFAULT_CONFIG,
-            ...config
+        this.parameters = {
+
+            seriesResistance: 1000,
+
+            loadResistance: 1000,
+
+            zenerVoltage: 5.1,
+
+            forwardVoltage: 0.7,
+
+            zenerResistance: 8,
+
+            maxCurrent: 0.02,
+
+            ...options
+
         };
 
         this.mode = 'forward';
 
-        this.supplyVoltage = 0;
-
-        this.loadResistance =
-            this.config.loadResistance;
-
-        this.seriesResistance =
-            this.config.seriesResistance;
-
-        this.zenerVoltage =
-            this.config.zenerVoltage;
-
-        this.dataPoints = [];
+        this.observations = [];
 
         this.lastResult = null;
+
+        this.maxSupplyVoltage = 12;
     }
 
 
-    /* =====================================
-       1. UPDATE PARAMETERS
-    ===================================== */
-
-    updateParameters(parameters = {}) {
-
-        if (
-            parameters.seriesResistance !== undefined
-        ) {
-            this.seriesResistance = clamp(
-                Number(parameters.seriesResistance),
-                100,
-                10000
-            );
-        }
-
-        if (
-            parameters.loadResistance !== undefined
-        ) {
-            this.loadResistance = clamp(
-                Number(parameters.loadResistance),
-                100,
-                100000
-            );
-        }
-
-        if (
-            parameters.zenerVoltage !== undefined
-        ) {
-            this.zenerVoltage = clamp(
-                Number(parameters.zenerVoltage),
-                2,
-                12
-            );
-        }
-
-        if (
-            parameters.supplyVoltage !== undefined
-        ) {
-            this.supplyVoltage = clamp(
-                Number(parameters.supplyVoltage),
-                0,
-                12
-            );
-        }
-
-        return this.getConfiguration();
-    }
-
-
-    /* =====================================
-       2. SET EXPERIMENT MODE
-    ===================================== */
+    /* ================================================
+       1. SET EXPERIMENT MODE
+    ================================================ */
 
     setMode(mode) {
 
-        const availableModes = [
+        const validModes = [
             'forward',
             'reverse',
             'load-regulation'
         ];
 
-        if (!availableModes.includes(mode)) {
+        if (!validModes.includes(mode)) {
 
-            throw new Error(
-                `Invalid experiment mode: ${mode}`
+            console.warn(
+                'Unknown experiment mode:',
+                mode
             );
+
+            return;
         }
 
         this.mode = mode;
 
-        this.dataPoints = [];
-
         this.lastResult = null;
 
-        return this.mode;
+        this.observations = [];
     }
 
 
-    /* =====================================
-       3. FORWARD BIAS SIMULATION
-    ===================================== */
+    /* ================================================
+       2. UPDATE PARAMETERS
+    ================================================ */
 
-    calculateForwardBias(voltage) {
+    updateParameters(parameters = {}) {
 
-        const inputVoltage = clamp(
-            Number(voltage),
-            0,
-            12
-        );
+        for (const [key, value] of
+            Object.entries(parameters)) {
 
-        const vf = this.config.forwardVoltage;
+            if (
+                key in this.parameters &&
+                Number.isFinite(Number(value))
+            ) {
 
-        const resistance = this.seriesResistance;
-
-        let current = 0;
-
-        let diodeVoltage = inputVoltage;
-
-        if (inputVoltage > vf) {
-
-            current =
-                (inputVoltage - vf) / resistance;
-
-            current = clamp(
-                current,
-                0,
-                this.config.maxCurrent
-            );
-
-            diodeVoltage =
-                vf + current * this.config.zenerResistance;
+                this.parameters[key] = Number(value);
+            }
         }
 
-        return {
-
-            mode: 'forward',
-
-            supplyVoltage: round(
-                inputVoltage,
-                3
-            ),
-
-            diodeVoltage: round(
-                diodeVoltage,
-                3
-            ),
-
-            currentAmpere: round(
-                current,
-                6
-            ),
-
-            currentMilliampere: round(
-                current * 1000,
-                3
-            ),
-
-            region: current > 0
-                ? 'Forward Conduction'
-                : 'Cut-in Region',
-
-            powerMilliwatt: round(
-                diodeVoltage * current * 1000,
-                3
-            )
-        };
-    }
-
-
-    /* =====================================
-       4. REVERSE BIAS SIMULATION
-    ===================================== */
-
-    calculateReverseBias(voltage) {
-
-        const inputVoltage = clamp(
-            Number(voltage),
-            0,
-            12
-        );
-
-        const vz = this.zenerVoltage;
-
-        const resistance = this.seriesResistance;
-
-        let current = 0;
-
-        let diodeVoltage = inputVoltage;
-
-        let region = 'Reverse Blocking';
-
-        if (inputVoltage >= vz) {
-
-            current =
-                (inputVoltage - vz) /
-                (resistance + this.config.zenerResistance);
-
-            current = clamp(
-                current,
-                0,
-                this.config.maxCurrent
-            );
-
-            diodeVoltage =
-                vz + current * this.config.zenerResistance;
-
-            region = 'Zener Breakdown';
-        }
-
-        return {
-
-            mode: 'reverse',
-
-            supplyVoltage: round(
-                inputVoltage,
-                3
-            ),
-
-            diodeVoltage: round(
-                diodeVoltage,
-                3
-            ),
-
-            currentAmpere: round(
-                current,
-                6
-            ),
-
-            currentMilliampere: round(
-                current * 1000,
-                3
-            ),
-
-            region,
-
-            powerMilliwatt: round(
-                diodeVoltage * current * 1000,
-                3
-            )
-        };
-    }
-
-
-    /* =====================================
-       5. LOAD REGULATION SIMULATION
-    ===================================== */
-
-    calculateLoadRegulation(
-        inputVoltage = this.supplyVoltage,
-        loadResistance = this.loadResistance
-    ) {
-
-        const vin = clamp(
-            Number(inputVoltage),
-            0,
-            12
-        );
-
-        const rl = clamp(
-            Number(loadResistance),
-            100,
-            100000
-        );
-
-        const rs = this.seriesResistance;
-
-        const vz = this.zenerVoltage;
-
-        const rz = this.config.zenerResistance;
-
-        /*
-           Simplified Zener shunt regulator model.
-
-           The source feeds a series resistor.
-           The load and Zener diode are in parallel.
-        */
-
-        const totalResistance = rs + rz;
-
-        const availableCurrent =
+        this.parameters.seriesResistance =
             Math.max(
-                0,
-                (vin - vz) / totalResistance
+                1,
+                this.parameters.seriesResistance
             );
 
-        const loadCurrentAtVz =
-            vz / rl;
+        this.parameters.loadResistance =
+            Math.max(
+                1,
+                this.parameters.loadResistance
+            );
 
-        const zenerCurrent =
-            availableCurrent - loadCurrentAtVz;
+        this.parameters.maxCurrent =
+            Math.max(
+                0.001,
+                this.parameters.maxCurrent
+            );
 
-        let outputVoltage;
-
-        let actualZenerCurrent;
-
-        let region;
-
-        if (zenerCurrent > 0) {
-
-            actualZenerCurrent = zenerCurrent;
-
-            outputVoltage =
-                vz + actualZenerCurrent * rz;
-
-            region = 'Voltage Regulation';
-        }
-
-        else {
-
-            // Zener is not conducting.
-            // Output is determined by the resistor divider.
-            outputVoltage =
-                vin * rl / (rs + rl);
-
-            actualZenerCurrent = 0;
-
-            region = 'No Zener Regulation';
-        }
-
-        const loadCurrent =
-            outputVoltage / rl;
-
-        const seriesCurrent =
-            (vin - outputVoltage) / rs;
-
-        return {
-
-            mode: 'load-regulation',
-
-            inputVoltage: round(vin, 3),
-
-            outputVoltage: round(
-                outputVoltage,
-                3
-            ),
-
-            loadResistance: round(
-                rl,
-                2
-            ),
-
-            loadCurrentMilliampere: round(
-                loadCurrent * 1000,
-                3
-            ),
-
-            zenerCurrentMilliampere: round(
-                Math.max(0, actualZenerCurrent) * 1000,
-                3
-            ),
-
-            seriesCurrentMilliampere: round(
-                Math.max(0, seriesCurrent) * 1000,
-                3
-            ),
-
-            region,
-
-            zenerPowerMilliwatt: round(
-                outputVoltage *
-                Math.max(0, actualZenerCurrent) *
-                1000,
-                3
-            )
-        };
+        return this.parameters;
     }
 
 
-    /* =====================================
-       6. RUN CURRENT EXPERIMENT
-    ===================================== */
+    /* ================================================
+       3. MAIN RUN FUNCTION
+    ================================================ */
 
-    run(voltage = this.supplyVoltage) {
+    run(inputVoltage = 0) {
 
-        this.supplyVoltage = clamp(
-            Number(voltage),
+        const voltage = Math.max(
             0,
-            12
+            Math.min(
+                Number(inputVoltage) || 0,
+                this.maxSupplyVoltage
+            )
         );
 
         let result;
@@ -447,34 +135,32 @@ export class ZenerSimulation {
 
             case 'forward':
 
-                result = this.calculateForwardBias(
-                    this.supplyVoltage
-                );
+                result =
+                    this.calculateForwardBias(voltage);
 
                 break;
+
 
             case 'reverse':
 
-                result = this.calculateReverseBias(
-                    this.supplyVoltage
-                );
+                result =
+                    this.calculateReverseBias(voltage);
 
                 break;
+
 
             case 'load-regulation':
 
-                result = this.calculateLoadRegulation(
-                    this.supplyVoltage,
-                    this.loadResistance
-                );
+                result =
+                    this.calculateLoadRegulation(voltage);
 
                 break;
 
+
             default:
 
-                throw new Error(
-                    'Unknown simulation mode.'
-                );
+                result =
+                    this.calculateForwardBias(voltage);
         }
 
         this.lastResult = result;
@@ -483,241 +169,512 @@ export class ZenerSimulation {
     }
 
 
-    /* =====================================
-       7. GENERATE V-I CHARACTERISTICS
-    ===================================== */
+    /* ================================================
+       4. FORWARD BIAS
+    ================================================ */
+
+    calculateForwardBias(inputVoltage) {
+
+        const R =
+            this.parameters.seriesResistance;
+
+        const Vf =
+            this.parameters.forwardVoltage;
+
+        const maxCurrent =
+            this.parameters.maxCurrent;
+
+        let current = 0;
+
+        let diodeVoltage = 0;
+
+        if (inputVoltage > Vf) {
+
+            current =
+                (inputVoltage - Vf) / R;
+
+            current = Math.min(
+                current,
+                maxCurrent
+            );
+
+            diodeVoltage =
+                Vf + current * 5;
+        }
+
+        const power =
+            diodeVoltage * current;
+
+        return {
+
+            mode: 'forward',
+
+            inputVoltage,
+
+            diodeVoltage,
+
+            currentAmpere: current,
+
+            currentMilliampere:
+                current * 1000,
+
+            powerWatt: power,
+
+            powerMilliwatt:
+                power * 1000,
+
+            region:
+                current > 0
+                    ? 'Forward Conduction'
+                    : 'Cut-off',
+
+            message:
+                current > 0
+                    ? 'Diode is conducting in forward bias.'
+                    : 'Forward voltage is below the conduction threshold.'
+        };
+    }
+
+
+    /* ================================================
+       5. REVERSE BIAS
+    ================================================ */
+
+    calculateReverseBias(inputVoltage) {
+
+        const R =
+            this.parameters.seriesResistance;
+
+        const Vz =
+            this.parameters.zenerVoltage;
+
+        const rz =
+            this.parameters.zenerResistance;
+
+        const maxCurrent =
+            this.parameters.maxCurrent;
+
+        let current = 0;
+
+        let diodeVoltage = inputVoltage;
+
+        let region = 'Reverse Blocking';
+
+        if (inputVoltage >= Vz) {
+
+            current =
+                (inputVoltage - Vz) /
+                (R + rz);
+
+            current = Math.min(
+                current,
+                maxCurrent
+            );
+
+            diodeVoltage =
+                Vz + current * rz;
+
+            region =
+                'Zener Breakdown';
+        }
+
+        const power =
+            diodeVoltage * current;
+
+        return {
+
+            mode: 'reverse',
+
+            inputVoltage,
+
+            diodeVoltage,
+
+            currentAmpere: current,
+
+            currentMilliampere:
+                current * 1000,
+
+            powerWatt: power,
+
+            powerMilliwatt:
+                power * 1000,
+
+            region,
+
+            message:
+                region === 'Zener Breakdown'
+                    ? 'Zener breakdown region reached in the educational model.'
+                    : 'Diode is in reverse blocking region.'
+        };
+    }
+
+
+    /* ================================================
+       6. LOAD REGULATION
+    ================================================ */
+
+    calculateLoadRegulation(inputVoltage) {
+
+        const Rs =
+            this.parameters.seriesResistance;
+
+        const RL =
+            this.parameters.loadResistance;
+
+        const Vz =
+            this.parameters.zenerVoltage;
+
+        const rz =
+            this.parameters.zenerResistance;
+
+        const maxCurrent =
+            this.parameters.maxCurrent;
+
+        const availableCurrent =
+            Math.max(
+                0,
+                (inputVoltage - Vz) / Rs
+            );
+
+        const loadCurrentAtVz =
+            Vz / RL;
+
+        let zenerCurrent = 0;
+
+        let outputVoltage = 0;
+
+        let status = 'Unregulated';
+
+        if (inputVoltage <= 0) {
+
+            outputVoltage = 0;
+
+        }
+
+        else if (availableCurrent >
+            loadCurrentAtVz) {
+
+            zenerCurrent =
+                Math.min(
+                    availableCurrent -
+                    loadCurrentAtVz,
+                    maxCurrent
+                );
+
+            outputVoltage =
+                Vz + zenerCurrent * rz;
+
+            outputVoltage = Math.min(
+                outputVoltage,
+                inputVoltage
+            );
+
+            status = 'Zener Regulating';
+
+        }
+
+        else {
+
+            /*
+              Simplified no-breakdown load condition:
+              The Zener is treated as non-conducting.
+              Output is determined by the series/load divider.
+            */
+
+            outputVoltage =
+                inputVoltage *
+                RL / (Rs + RL);
+
+            zenerCurrent = 0;
+
+            status = 'Unregulated';
+        }
+
+
+        const loadCurrent =
+            outputVoltage / RL;
+
+        const zenerPower =
+            outputVoltage * zenerCurrent;
+
+        const loadPower =
+            outputVoltage * loadCurrent;
+
+        return {
+
+            mode: 'load-regulation',
+
+            inputVoltage,
+
+            outputVoltage,
+
+            currentMilliampere:
+                loadCurrent * 1000,
+
+            loadCurrentAmpere:
+                loadCurrent,
+
+            loadCurrentMilliampere:
+                loadCurrent * 1000,
+
+            zenerCurrentAmpere:
+                zenerCurrent,
+
+            zenerCurrentMilliampere:
+                zenerCurrent * 1000,
+
+            zenerPowerWatt:
+                zenerPower,
+
+            zenerPowerMilliwatt:
+                zenerPower * 1000,
+
+            powerWatt:
+                loadPower,
+
+            powerMilliwatt:
+                loadPower * 1000,
+
+            region: status,
+
+            regulationStatus: status,
+
+            message:
+                status === 'Zener Regulating'
+                    ? 'Zener diode is regulating the output in the simplified model.'
+                    : 'Output is not maintained at the nominal Zener voltage.'
+        };
+    }
+
+
+    /* ================================================
+       7. RECORD OBSERVATION
+    ================================================ */
+
+    recordObservation() {
+
+        if (!this.lastResult) {
+
+            return null;
+        }
+
+        const observation = {
+
+            ...this.lastResult,
+
+            observationNumber:
+                this.observations.length + 1,
+
+            recordedAt:
+                new Date().toLocaleTimeString()
+
+        };
+
+        this.observations.push(observation);
+
+        return observation;
+    }
+
+
+    /* ================================================
+       8. GENERATE V-I DATA
+    ================================================ */
 
     generateVIData(
-        start = 0,
-        end = 12,
+        startVoltage = 0,
+        endVoltage = 12,
         steps = 60
     ) {
 
-        const points = [];
-
         const originalMode = this.mode;
 
-        const stepSize =
-            (end - start) / steps;
+        const data = [];
 
-        for (let i = 0; i <= steps; i++) {
+        this.mode =
+            originalMode === 'reverse'
+                ? 'reverse'
+                : 'forward';
+
+        const count = Math.max(
+            2,
+            Math.floor(steps)
+        );
+
+        for (let i = 0; i <= count; i++) {
 
             const voltage =
-                start + i * stepSize;
+                startVoltage +
+                (endVoltage - startVoltage) *
+                i / count;
 
-            let result;
+            const result =
+                this.mode === 'reverse'
+                    ? this.calculateReverseBias(voltage)
+                    : this.calculateForwardBias(voltage);
 
-            if (originalMode === 'forward') {
+            data.push({
 
-                result = this.calculateForwardBias(
-                    voltage
-                );
-            }
+                voltage: result.inputVoltage,
 
-            else {
+                diodeVoltage:
+                    result.diodeVoltage,
 
-                result = this.calculateReverseBias(
-                    voltage
-                );
-            }
+                current:
+                    result.currentMilliampere,
 
-            points.push({
+                currentMilliampere:
+                    result.currentMilliampere,
 
-                voltage: result.diodeVoltage,
+                power:
+                    result.powerMilliwatt,
 
-                current: result.currentMilliampere,
-
-                supplyVoltage: voltage,
-
-                region: result.region
+                region:
+                    result.region
 
             });
         }
 
-        this.dataPoints = points;
+        this.mode = originalMode;
 
-        return points;
+        return data;
     }
 
 
-    /* =====================================
-       8. GENERATE LOAD REGULATION DATA
-    ===================================== */
+    /* ================================================
+       9. GENERATE LOAD DATA
+    ================================================ */
 
-    generateLoadData(
-        minResistance = 500,
-        maxResistance = 10000,
-        steps = 30
-    ) {
+    generateLoadData() {
 
-        const points = [];
+        const originalResistance =
+            this.parameters.loadResistance;
 
-        const stepSize =
-            (maxResistance - minResistance) / steps;
+        const originalMode =
+            this.mode;
 
-        for (let i = 0; i <= steps; i++) {
+        const data = [];
 
-            const resistance =
-                minResistance + i * stepSize;
+        this.mode = 'load-regulation';
+
+        const resistanceValues = [
+            470,
+            680,
+            1000,
+            1500,
+            2200,
+            3300,
+            4700,
+            6800,
+            10000
+        ];
+
+        for (const resistance of resistanceValues) {
+
+            this.parameters.loadResistance =
+                resistance;
 
             const result =
                 this.calculateLoadRegulation(
-                    this.supplyVoltage,
-                    resistance
+                    this.lastResult?.inputVoltage ?? 10
                 );
 
-            points.push({
+            data.push({
 
-                resistance: round(
-                    resistance,
-                    2
-                ),
+                loadResistance: resistance,
+
+                resistance,
 
                 outputVoltage:
+                    result.outputVoltage,
+
+                voltage:
                     result.outputVoltage,
 
                 loadCurrent:
                     result.loadCurrentMilliampere,
 
+                current:
+                    result.loadCurrentMilliampere,
+
                 zenerCurrent:
                     result.zenerCurrentMilliampere,
 
-                region: result.region
+                status:
+                    result.regulationStatus
+
             });
         }
 
-        this.dataPoints = points;
+        this.parameters.loadResistance =
+            originalResistance;
 
-        return points;
+        this.mode = originalMode;
+
+        return data;
     }
 
 
-    /* =====================================
-       9. RECORD OBSERVATION
-    ===================================== */
+    /* ================================================
+       10. REGULATION CALCULATION
+    ================================================ */
 
-    recordObservation() {
+    calculateRegulation(
+        noLoadVoltage,
+        fullLoadVoltage
+    ) {
 
-        if (!this.lastResult) {
+        if (
+            !Number.isFinite(noLoadVoltage) ||
+            !Number.isFinite(fullLoadVoltage) ||
+            fullLoadVoltage <= 0
+        ) {
             return null;
         }
 
-        return {
-            ...this.lastResult,
-            timestamp: new Date().toISOString()
-        };
+        return (
+            (noLoadVoltage - fullLoadVoltage) /
+            fullLoadVoltage
+        ) * 100;
     }
 
 
-    /* =====================================
-       10. RESET SIMULATION
-    ===================================== */
+    /* ================================================
+       11. RESET
+    ================================================ */
 
     reset() {
 
-        this.supplyVoltage = 0;
-
-        this.dataPoints = [];
+        this.observations = [];
 
         this.lastResult = null;
 
-        this.loadResistance =
-            this.config.loadResistance;
-
-        return this.run(0);
+        return true;
     }
 
 
-    /* =====================================
-       11. GET CONFIGURATION
-    ===================================== */
+    /* ================================================
+       12. GETTERS
+    ================================================ */
 
-    getConfiguration() {
+    getParameters() {
 
         return {
-
-            mode: this.mode,
-
-            supplyVoltage:
-                this.supplyVoltage,
-
-            seriesResistance:
-                this.seriesResistance,
-
-            loadResistance:
-                this.loadResistance,
-
-            zenerVoltage:
-                this.zenerVoltage,
-
-            forwardVoltage:
-                this.config.forwardVoltage
+            ...this.parameters
         };
     }
 
 
-    /* =====================================
-       12. SAFETY CHECK
-    ===================================== */
+    getObservations() {
 
-    checkOperatingLimits(result) {
-
-        const warnings = [];
-
-        if (
-            result.powerMilliwatt !== undefined &&
-            result.powerMilliwatt > 250
-        ) {
-            warnings.push(
-                'Diode power exceeds the example 250 mW limit.'
-            );
-        }
-
-        if (
-            result.zenerPowerMilliwatt !== undefined &&
-            result.zenerPowerMilliwatt > 250
-        ) {
-            warnings.push(
-                'Zener power exceeds the example 250 mW limit.'
-            );
-        }
-
-        if (
-            result.currentMilliampere !== undefined &&
-            result.currentMilliampere > 20
-        ) {
-            warnings.push(
-                'Current exceeds the example 20 mA operating limit.'
-            );
-        }
-
-        return {
-
-            safe: warnings.length === 0,
-
-            warnings
-        };
+        return [
+            ...this.observations
+        ];
     }
+
+
+    getLastResult() {
+
+        return this.lastResult;
+    }
+
 }
-
-
-/* =========================================
-   FACTORY FUNCTION
-========================================= */
-
-export function createSimulation(config = {}) {
-
-    return new ZenerSimulation(config);
-}
-
-
-/* =========================================
-   DEFAULT INSTANCE
-========================================= */
-
-export const simulation =
-    new ZenerSimulation();
-
-
-export default ZenerSimulation;
-
